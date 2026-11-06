@@ -255,7 +255,7 @@ Future<Uint8List> buildPoemPdf({
         textDirection: TextDirection.rtl,
         textAlign: TextAlign.right,
         textScaler: TextScaler.noScaling,
-      )..layout(minWidth: hw, maxWidth: hw);
+      )..layout(minWidth: hw, maxWidth: j.fits ? hw + 2 : hw);
 
   final sadr = <TextPainter>[];
   final ajz = <TextPainter>[];
@@ -326,7 +326,8 @@ Future<Uint8List> buildPoemPdf({
 
   Future<Uint8List> renderPage(int pi, List<int> idx) async {
     final rec = ui.PictureRecorder();
-    final canvas = Canvas(rec, Rect.fromLTWH(0, 0, _pageW, _pageH));
+    // بدون cullRect: وجوده مع التكبير كان يقص كل ما بعد أول ثلث من الصفحة
+    final canvas = Canvas(rec);
     canvas.scale(_scale);
     _paintPage(canvas, theme, paper);
 
@@ -343,7 +344,7 @@ Future<Uint8List> buildPoemPdf({
         py += 16 + gap * .6;
       }
       // الصدر: من أقصى اليمين
-      sadr[i].paint(canvas, Offset(_mx + _avail - hw, py));
+      sadr[i].paint(canvas, Offset(_mx + _avail - sadr[i].width, py));
       py += sadr[i].height + gapV;
       // العجز: تحته مزاحًا لليسار
       ajz[i].paint(canvas, Offset(_mx, py));
