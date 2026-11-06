@@ -486,7 +486,7 @@ class _MainShellState extends State<MainShell> {
 }
 
 // ───────────── الشريط السفلي: "محراب النور" ─────────────
-// الشريط يطلع منه قوس محراب مدبّب تحت التبويب المختار، وفوقه نجمة ذهبية مضيئة
+// الشريط يطلع منه قوس محراب مدبّب تحت التبويب المختار، وفوقه قلب ذهبي مضيء
 // تنزلق وتدور من تبويب لآخر، وبقية التبويبات أيقونة + عنوان على الشريط.
 class _FancyBottomBar extends StatelessWidget {
   final int selected;
@@ -502,7 +502,7 @@ class _FancyBottomBar extends StatelessWidget {
 
   static const double _h = 96; // الارتفاع الكلي
   static const double _y0 = 30; // أعلى حافة للشريط (فوقها مكان القوس والنجمة)
-  static const double _badge = 54; // قطر النجمة
+  static const double _badge = 54; // قطر القلب
 
   @override
   Widget build(BuildContext context) {
@@ -549,7 +549,7 @@ class _FancyBottomBar extends StatelessWidget {
                           bottom: 0,
                           child: _item(i, (1 - (t - i).abs()).clamp(0.0, 1.0)),
                         ),
-                      // النجمة المضيئة
+                      // القلب المضيء
                       Positioned(
                         left: cx - _badge / 2,
                         top: _y0 - _badge / 2,
@@ -572,13 +572,10 @@ class _FancyBottomBar extends StatelessWidget {
                                   ],
                                 ),
                               ),
-                              Transform.rotate(
-                                angle: t * math.pi / 2,
-                                child: CustomPaint(
-                                    size: const Size(_badge, _badge),
-                                    painter:
-                                        _BadgePainter(accentGold, brownDark)),
-                              ),
+                              CustomPaint(
+                                  size: const Size(_badge, _badge),
+                                  painter:
+                                      _BadgePainter(accentGold, brownDark)),
                               Icon(_items[nearest].$1,
                                   size: 23, color: accentGold),
                             ],
@@ -601,7 +598,7 @@ class _FancyBottomBar extends StatelessWidget {
         onTap: () => onTap(i),
         child: Stack(
           children: [
-            // الأيقونة تختفي تدريجيًا لأن النجمة تحلّ محلها
+            // الأيقونة تختفي تدريجيًا لأن القلب يحلّ محلها
             Positioned(
               top: _y0 + 9,
               left: 0,
@@ -676,7 +673,7 @@ class _BarPainter extends CustomPainter {
 
     canvas.save();
     canvas.clipPath(shape);
-    // هالة ذهبية خلف النجمة
+    // هالة ذهبية خلف القلب
     canvas.drawCircle(
         Offset(cx, y0),
         62,
@@ -685,7 +682,7 @@ class _BarPainter extends CustomPainter {
             gold.withOpacity(.38),
             gold.withOpacity(0),
           ]).createShader(Rect.fromCircle(center: Offset(cx, y0), radius: 62)));
-    // نقش النجوم الهندسي
+    // نقش القلوب الهندسي
     const _PatternPainter(k: 1.1).paint(canvas, size);
     // خط ذهبي داخلي رفيع أسفل الشريط
     canvas.drawLine(
@@ -1315,6 +1312,32 @@ class DiwansPage extends StatelessWidget {
       );
 }
 
+/// ألوان الدواوين: لكل ديوان لون مختلف (فاتح، غامق) حسب ترتيبه،
+/// وتتكرر الألوان بالترتيب لو زاد عدد الدواوين عن عدد الألوان.
+const _diwanPalette = <(Color, Color)>[
+  (Color(0xFF5D4037), Color(0xFF3E2723)), // بني
+  (Color(0xFF1B5E20), Color(0xFF0D3B13)), // أخضر
+  (Color(0xFF0D47A1), Color(0xFF082F6B)), // أزرق
+  (Color(0xFF7B1F2E), Color(0xFF4E111C)), // عنابي
+  (Color(0xFF4A148C), Color(0xFF2F0C5A)), // بنفسجي
+  (Color(0xFF00695C), Color(0xFF00443B)), // تركوازي
+  (Color(0xFFBF360C), Color(0xFF80230A)), // برتقالي محروق
+  (Color(0xFF880E4F), Color(0xFF570A32)), // وردي ملكي
+  (Color(0xFF33691E), Color(0xFF1F4212)), // أخضر زيتي
+  (Color(0xFF1A237E), Color(0xFF0F1550)), // نيلي
+  (Color(0xFF37474F), Color(0xFF222D32)), // فحمي
+  (Color(0xFF01579B), Color(0xFF013A66)), // أزرق سماوي
+];
+
+(Color, Color) diwanColors(int number) =>
+    _diwanPalette[(number - 1) % _diwanPalette.length];
+
+/// لون الديوان من اسمه (لو الاسم غير معروف نرجع للون الثيم الافتراضي)
+(Color, Color) diwanColorsByName(String name) {
+  final i = diwanNames.indexOf(name);
+  return i < 0 ? (brown, brownDark) : diwanColors(i + 1);
+}
+
 /// بطاقة الديوان (تصميم "غلاف الكتاب"):
 /// كعب ملوّن على اليمين عليه محراب مذهّب يحمل الرقم،
 /// وجسم فاتح فيه العنوان كاملًا + فاصل زخرفي + عدد القصائد وسهم الدخول.
@@ -1326,6 +1349,7 @@ class DiwanTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final count = (poems[name] ?? []).length;
+    final dc = diwanColors(number);
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
       child: Container(
@@ -1362,7 +1386,7 @@ class DiwanTile extends StatelessWidget {
                                   gradient: LinearGradient(
                                     begin: Alignment.topCenter,
                                     end: Alignment.bottomCenter,
-                                    colors: [brown, brownDark],
+                                    colors: [dc.$1, dc.$2],
                                   ),
                                 ),
                               ),
@@ -1371,7 +1395,7 @@ class DiwanTile extends StatelessWidget {
                                 child: RepaintBoundary(
                                     child: CustomPaint(
                                         painter: _PatternPainter(k: 1.2)))),
-                            _ArchBadge(number: number),
+                            _ArchBadge(number: number, core: dc.$2),
                           ],
                         ),
                       ),
@@ -1455,7 +1479,7 @@ class DiwanTile extends StatelessWidget {
                                           gradient: LinearGradient(
                                               begin: Alignment.topRight,
                                               end: Alignment.bottomLeft,
-                                              colors: [brown, brownDark]),
+                                              colors: [dc.$1, dc.$2]),
                                           border: Border.all(
                                               color: accentGold, width: 1.3),
                                         ),
@@ -1487,7 +1511,8 @@ class DiwanTile extends StatelessWidget {
 /// محراب مذهّب يحمل رقم الديوان
 class _ArchBadge extends StatelessWidget {
   final int number;
-  const _ArchBadge({required this.number});
+  final Color core;
+  const _ArchBadge({required this.number, required this.core});
   @override
   Widget build(BuildContext context) => SizedBox(
         width: 56,
@@ -1497,7 +1522,7 @@ class _ArchBadge extends StatelessWidget {
           children: [
             CustomPaint(
                 size: const Size(56, 70),
-                painter: _ArchBadgePainter(accentGold, brownDark)),
+                painter: _ArchBadgePainter(accentGold, core)),
             SizedBox(
               width: 34,
               child: FittedBox(
@@ -1568,13 +1593,13 @@ class _ArchBadgePainter extends CustomPainter {
       old.gold != gold || old.core != core;
 }
 
-/// شارة الترقيم: نجمة ثمانية (مربعان متداخلان) ذهبية متدرّجة
+/// شارة الترقيم: قلب ذهبي متدرّج
 /// بداخلها دائرة داكنة بحلقة رفيعة، ويتوسطها الرقم (أو أيقونة)
 class _NumberStar extends StatelessWidget {
   final int? number;
   final IconData? icon;
   final double size;
-  final Color ring; // لون النجمة الخارجية
+  final Color ring; // لون القلب الخارجي
   final Color core; // لون الدائرة الداخلية
   final Color textColor;
   const _NumberStar({
@@ -1619,28 +1644,13 @@ class _BadgePainter extends CustomPainter {
   final Color core;
   const _BadgePainter(this.ring, this.core);
 
-  Path _square(Offset c, double r, double rot) {
-    final p = Path();
-    for (var i = 0; i < 4; i++) {
-      final a = rot + i * math.pi / 2;
-      final pt = Offset(c.dx + r * math.cos(a), c.dy + r * math.sin(a));
-      if (i == 0) {
-        p.moveTo(pt.dx, pt.dy);
-      } else {
-        p.lineTo(pt.dx, pt.dy);
-      }
-    }
-    return p..close();
-  }
-
   @override
   void paint(Canvas canvas, Size size) {
     final c = size.center(Offset.zero);
     final r = size.width / 2;
-    final star = Path.combine(PathOperation.union, _square(c, r, math.pi / 4),
-        _square(c, r, 0));
+    final star = _heart(c, r);
     final rect = Rect.fromCircle(center: c, radius: r);
-    // نجمة ذهبية متدرّجة
+    // قلب ذهبي متدرّج
     canvas.drawPath(
         star,
         Paint()
@@ -1659,18 +1669,17 @@ class _BadgePainter extends CustomPainter {
           ..color = Color.lerp(ring, Colors.black, .45)!.withOpacity(.7)
           ..style = PaintingStyle.stroke
           ..strokeWidth = .8);
-    // الدائرة الداخلية
-    canvas.drawCircle(c, r * .66, Paint()..color = core);
-    canvas.drawCircle(
-        c,
-        r * .66,
+    // القلب الداخلي
+    final inner = _heart(c, r * .72);
+    canvas.drawPath(inner, Paint()..color = core);
+    canvas.drawPath(
+        inner,
         Paint()
           ..color = Color.lerp(ring, Colors.white, .35)!
           ..style = PaintingStyle.stroke
           ..strokeWidth = 1.4);
-    canvas.drawCircle(
-        c,
-        r * .56,
+    canvas.drawPath(
+        _heart(c, r * .62),
         Paint()
           ..color = ring.withOpacity(.45)
           ..style = PaintingStyle.stroke
@@ -1707,14 +1716,18 @@ class _DiwanDetailPageState extends State<DiwanDetailPage> {
         if (q.isEmpty || normalizeArabic(list[i].title).contains(q))
           MapEntry(i, list[i]),
     ];
+    final dc = diwanColorsByName(widget.name);
     return Scaffold(
-      appBar:
-          AppBar(title: Text(widget.name, style: const TextStyle(fontSize: 16))),
+      appBar: AppBar(
+          backgroundColor: dc.$1,
+          title: Text(widget.name, style: const TextStyle(fontSize: 16))),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
         children: [
           PoemHeader(
-              title: widget.name, diwan: '${arDigits(list.length)} قصيدة'),
+              title: widget.name,
+              diwan: '${arDigits(list.length)} قصيدة',
+              colors: dc),
           const SizedBox(height: 18),
           if (list.length > 5) ...[
             TextField(
@@ -1801,6 +1814,7 @@ class PoemTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final count = versesLabel(poem.verses.length);
+    final dc = diwanColorsByName(diwan);
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Container(
@@ -1852,14 +1866,14 @@ class PoemTile extends StatelessWidget {
                               number: number,
                               size: 50,
                               ring: accentGold,
-                              core: brown,
+                              core: dc.$1,
                               textColor: Colors.white)
                         else
                           _NumberStar(
                               icon: Icons.menu_book_rounded,
                               size: 50,
                               ring: accentGold,
-                              core: brown,
+                              core: dc.$1,
                               textColor: Colors.white),
                         const SizedBox(width: 12),
                         Expanded(
@@ -2154,6 +2168,7 @@ class PoemPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Scaffold(
         appBar: AppBar(
+          backgroundColor: diwanColorsByName(diwan).$1,
           title: const Text('دواوين النور', style: TextStyle(fontSize: 17)),
           actions: [
             FavButton(diwan: diwan, poem: poem, dark: true, size: 28),
@@ -2204,7 +2219,10 @@ class PoemPage extends StatelessWidget {
         body: ListView(
           padding: const EdgeInsets.fromLTRB(14, 18, 14, 30),
           children: [
-            PoemHeader(title: poem.title, diwan: diwan),
+            PoemHeader(
+                title: poem.title,
+                diwan: diwan,
+                colors: diwanColorsByName(diwan)),
             const SizedBox(height: 16),
             PoemFrame(
               child: Column(
@@ -2791,22 +2809,31 @@ class _PoemBodyState extends State<PoemBody> {
   }
 }
 
-// ───────────── التصميم الإسلامي: نجمة ثمانية وزخارف ─────────────
+// ───────────── التصميم الإسلامي: قلوب وزخارف ─────────────
 
-Path _star8(Offset c, double r, [double ratio = .62]) {
-  final p = Path();
-  for (var i = 0; i < 16; i++) {
-    final rad = i.isEven ? r : r * ratio;
-    final a = -math.pi / 2 + i * math.pi / 8;
-    final pt = Offset(c.dx + rad * math.cos(a), c.dy + rad * math.sin(a));
-    if (i == 0) {
-      p.moveTo(pt.dx, pt.dy);
-    } else {
-      p.lineTo(pt.dx, pt.dy);
-    }
-  }
-  return p..close();
+Path _heart(Offset c, double r) {
+  // قلب داخل مربع نصف قطره r (العرض 2r تقريبًا، والارتفاع 1.84r)
+  Offset p(double x, double y) =>
+      Offset(c.dx + (x - .5) * 2 * r, c.dy + (y - .46) * 2 * r);
+  return Path()
+    ..moveTo(p(.5, .92).dx, p(.5, .92).dy)
+    ..cubicTo(p(.5, .92).dx, p(.5, .92).dy, p(.02, .6).dx, p(.02, .6).dy,
+        p(.02, .3).dx, p(.02, .3).dy)
+    ..cubicTo(p(.02, .12).dx, p(.02, .12).dy, p(.16, 0).dx, p(.16, 0).dy,
+        p(.3, 0).dx, p(.3, 0).dy)
+    ..cubicTo(p(.4, 0).dx, p(.4, 0).dy, p(.47, .06).dx, p(.47, .06).dy,
+        p(.5, .16).dx, p(.5, .16).dy)
+    ..cubicTo(p(.53, .06).dx, p(.53, .06).dy, p(.6, 0).dx, p(.6, 0).dy,
+        p(.7, 0).dx, p(.7, 0).dy)
+    ..cubicTo(p(.84, 0).dx, p(.84, 0).dy, p(.98, .12).dx, p(.98, .12).dy,
+        p(.98, .3).dx, p(.98, .3).dy)
+    ..cubicTo(p(.98, .6).dx, p(.98, .6).dy, p(.5, .92).dx, p(.5, .92).dy,
+        p(.5, .92).dx, p(.5, .92).dy)
+    ..close();
 }
+
+/// كانت نجمة ثمانية، أصبحت قلبًا (الاسم محفوظ حتى لا تتغير بقية الاستدعاءات)
+Path _star8(Offset c, double r, [double ratio = .62]) => _heart(c, r);
 
 void _drawMedallion(Canvas canvas, Offset c, double r) {
   canvas.drawPath(_star8(c, r), Paint()..color = brown);
@@ -2842,7 +2869,7 @@ class _StarPainter extends CustomPainter {
       old.color != color || old.stroke != stroke;
 }
 
-/// فاصل مزخرف بين الأبيات: خط - معيّن - نجمة - معيّن - خط
+/// فاصل مزخرف بين الأبيات: خط - معيّن - قلب - معيّن - خط
 class OrnamentDivider extends StatelessWidget {
   const OrnamentDivider({super.key});
   @override
@@ -2881,7 +2908,7 @@ class OrnamentDivider extends StatelessWidget {
   }
 }
 
-/// خلفية مزخرفة خفيفة (نجوم هندسية متكررة)
+/// خلفية مزخرفة خفيفة (قلوب متكررة)
 class _PatternPainter extends CustomPainter {
   final double k; // معامل شدّة النقش
   const _PatternPainter({this.k = 1.0});
@@ -2990,7 +3017,9 @@ class PoemFrame extends StatelessWidget {
 class PoemHeader extends StatelessWidget {
   final String title;
   final String diwan;
-  const PoemHeader({super.key, required this.title, required this.diwan});
+  final (Color, Color)? colors; // لون الديوان (اختياري)
+  const PoemHeader(
+      {super.key, required this.title, required this.diwan, this.colors});
   @override
   Widget build(BuildContext context) {
     const archRadius = BorderRadius.only(
@@ -3005,7 +3034,7 @@ class PoemHeader extends StatelessWidget {
         gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [brown, brownDark]),
+            colors: [colors?.$1 ?? brown, colors?.$2 ?? brownDark]),
         borderRadius: archRadius,
         border: Border.all(color: accentGold, width: 2),
         boxShadow: _softShadow(.28),
