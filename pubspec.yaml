@@ -24,23 +24,6 @@ flutter:
   assets:
     - assets/images/green_dome.jpg
 
-  fonts:
-    - family: Amiri
-      fonts:
-        - asset: assets/fonts/amiri.ttf
-    - family: Scheherazade
-      fonts:
-        - asset: assets/fonts/scheherazade.ttf
-    - family: NotoNaskh
-      fonts:
-        - asset: assets/fonts/naskh.ttf
-    - family: Lateef
-      fonts:
-        - asset: assets/fonts/lateef.ttf
-    - family: ArefRuqaa
-      fonts:
-        - asset: assets/fonts/ruqaa.ttf
-
 flutter_launcher_icons:
   android: true
   ios: true

@@ -53,31 +53,6 @@ class FontSettingsPage extends StatelessWidget {
         ),
       );
 
-  Future<void> _pickFont(BuildContext context) async {
-    final choice = await showModalBottomSheet<FontChoice>(
-      context: context,
-      backgroundColor: const Color(0xFFFFFBF2),
-      builder: (ctx) => SafeArea(
-        child: ListView(
-          shrinkWrap: true,
-          padding: const EdgeInsets.symmetric(vertical: 10),
-          children: [
-            for (final c in fontChoices)
-              ListTile(
-                title: Text(c.label),
-                trailing: poemFontFamily.value == c.family
-                    ? const Icon(Icons.check_circle, color: appGreen)
-                    : null,
-                onTap: () => Navigator.pop(ctx, c),
-              ),
-          ],
-        ),
-      ),
-    );
-    if (choice == null) return;
-    poemFontFamily.value = choice.family;
-  }
-
   Future<void> _pickColor(BuildContext context) async {
     await showModalBottomSheet<void>(
       context: context,
@@ -172,23 +147,6 @@ class FontSettingsPage extends StatelessWidget {
                   ],
                 );
               },
-            ),
-
-            // ── نوع الخط ──
-            _title('نوع الخط'),
-            ListenableBuilder(
-              listenable: poemFontFamily,
-              builder: (_, __) => _optionButton(
-                icon: Icons.font_download_rounded,
-                title: 'اختيار نوع الخط',
-                trailing: Text(
-                    fontChoices
-                        .firstWhere((c) => c.family == poemFontFamily.value,
-                            orElse: () => fontChoices.first)
-                        .label,
-                    style: const TextStyle(color: Colors.black54)),
-                onTap: () => _pickFont(context),
-              ),
             ),
 
             // ── لون الخط ──
