@@ -106,17 +106,33 @@ class _SplashScreenState extends State<SplashScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Text('سيد الشعراء',
-                  style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 36,
-                      fontWeight: FontWeight.bold)),
-              const SizedBox(height: 14),
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 24),
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text('سيد الشعراء',
+                      style: TextStyle(
+                          fontFamily: 'WinsoftThuluth',
+                          color: Colors.white,
+                          fontSize: 80,
+                          height: 1.3,
+                          fontWeight: FontWeight.w700,
+                          shadows: [
+                            Shadow(
+                                color: Color(0x66000000),
+                                blurRadius: 8,
+                                offset: Offset(0, 3)),
+                          ])),
+                ),
+              ),
+              const SizedBox(height: 10),
               const Text('عبدالرحمن مصطفى الأزهري',
                   style: TextStyle(
+                      fontFamily: 'WinsoftThuluth',
                       color: Color(0xFFE8D9BC),
-                      fontSize: 20,
-                      fontWeight: FontWeight.w500)),
+                      fontSize: 26,
+                      height: 1.3,
+                      fontWeight: FontWeight.w700)),
               const SizedBox(height: 40),
               Text(arDigits(count),
                   style: const TextStyle(

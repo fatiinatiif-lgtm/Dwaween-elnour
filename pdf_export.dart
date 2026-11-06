@@ -214,7 +214,9 @@ Future<Uint8List> buildPoemPdf({
   required Color textColor,
   required Color paper,
 }) async {
-  final baseStyle = DefaultTextStyle.of(context).style;
+  // نفس ستايل النص الذي يستخدمه التطبيق داخل الصفحات (من الثيم)
+  final baseStyle = (Theme.of(context).textTheme.bodyMedium ?? const TextStyle())
+      .copyWith(decoration: TextDecoration.none);
 
   TextStyle styleFor(double s) => baseStyle.merge(TextStyle(
         fontSize: s,
