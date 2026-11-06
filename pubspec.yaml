@@ -23,16 +23,9 @@ flutter:
   assets:
     - assets/images/green_dome.jpg
 
-  # لو عايزة خط عربي معيّن (مثلاً Amiri أو Noto Naskh Arabic):
-  # حطي ملفات الخط في assets/fonts/ وفكّي التعليق، وأضيفي fontFamily في ThemeData
-  # fonts:
-  #   - family: Amiri
-  #     fonts:
-  #       - asset: assets/fonts/Amiri-Regular.ttf
-
 flutter_launcher_icons:
   android: true
-  ios: true
+  ios: false
   image_path: assets/icons/app_icon.png
   adaptive_icon_background: '#293149'
   adaptive_icon_foreground: assets/icons/app_icon.png
