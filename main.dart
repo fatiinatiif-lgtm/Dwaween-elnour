@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'poems_data.dart';
+import 'poems_extra.dart';
 import 'pdf_export.dart';
 import 'saved_files.dart';
 
@@ -821,6 +821,7 @@ class _HomePageState extends State<HomePage> {
                     poem: h.poem,
                     diwan: h.diwan,
                     snippet: h.snippet,
+                    highlight: normalizeArabic(controller.text),
                   )),
           ] else ...[
             const _LastReadCard(),
@@ -1804,12 +1805,14 @@ class PoemTile extends StatelessWidget {
   final String diwan;
   final int? number;
   final String snippet;
+  final String highlight; // نص البحث (مُطبَّع) لتمييزه
   const PoemTile({
     super.key,
     required this.poem,
     required this.diwan,
     this.number,
     this.snippet = '',
+    this.highlight = '',
   });
 
   Widget _meta(IconData icon, String text) => Container(
@@ -1877,7 +1880,10 @@ class PoemTile extends StatelessWidget {
                     Navigator.push(
                         context,
                         MaterialPageRoute(
-                            builder: (_) => PoemPage(poem: poem, diwan: diwan)));
+                            builder: (_) => PoemPage(
+                                poem: poem,
+                                diwan: diwan,
+                                highlight: highlight)));
                   },
                   child: Padding(
                     padding: const EdgeInsetsDirectional.fromSTEB(16, 12, 4, 12),
@@ -1902,7 +1908,9 @@ class PoemTile extends StatelessWidget {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(poem.title,
+                              Text.rich(
+                                  highlightSpan(poem.title,
+                                      findMatchRanges(poem.title, highlight)),
                                   maxLines: 2,
                                   overflow: TextOverflow.ellipsis,
                                   style: TextStyle(
@@ -1931,7 +1939,9 @@ class PoemTile extends StatelessWidget {
                                     color: accentGold.withOpacity(.10),
                                     borderRadius: BorderRadius.circular(10),
                                   ),
-                                  child: Text(snippet,
+                                  child: Text.rich(
+                                      highlightSpan(snippet,
+                                          findMatchRanges(snippet, highlight)),
                                       maxLines: 2,
                                       overflow: TextOverflow.ellipsis,
                                       style: TextStyle(
@@ -2109,7 +2119,12 @@ class _EmptyFavorites extends StatelessWidget {
 class PoemPage extends StatelessWidget {
   final Poem poem;
   final String diwan;
-  const PoemPage({super.key, required this.poem, required this.diwan});
+  final String highlight; // نص البحث (غير مُطبَّع) لتمييزه داخل القصيدة
+  const PoemPage(
+      {super.key,
+      required this.poem,
+      required this.diwan,
+      this.highlight = ''});
 
   /// نص القصيدة كاملًا مع التذييل
   String get _fullText {
@@ -2289,7 +2304,7 @@ class PoemPage extends StatelessWidget {
             PoemFrame(
               child: Column(
                 children: [
-                  PoemBody(poem: poem),
+                  PoemBody(poem: poem, highlight: normalizeArabic(highlight)),
                   const _PoemFooter(),
                 ],
               ),
@@ -2742,12 +2757,15 @@ class SectionHeading extends StatelessWidget {
 class _Line {
   final Justified sadr;
   final Justified ajz;
-  const _Line(this.sadr, this.ajz);
+  final List<(int, int)> sadrHl; // نطاقات التمييز في الصدر
+  final List<(int, int)> ajzHl; // نطاقات التمييز في العجز
+  const _Line(this.sadr, this.ajz, [this.sadrHl = const [], this.ajzHl = const []]);
 }
 
 class PoemBody extends StatefulWidget {
   final Poem poem;
-  const PoemBody({super.key, required this.poem});
+  final String highlight; // نص البحث المُطبَّع، أو فارغ
+  const PoemBody({super.key, required this.poem, this.highlight = ''});
   @override
   State<PoemBody> createState() => _PoemBodyState();
 }
@@ -2758,6 +2776,8 @@ class _PoemBodyState extends State<PoemBody> {
   double _w = 0, _size = 22;
   TextStyle _style = const TextStyle();
   bool _allFit = true;
+  final GlobalKey _matchKey = GlobalKey(); // أول بيت فيه نص البحث
+  bool _scrolled = false;
 
   TextStyle _styleFor(BuildContext ctx, double size) =>
       withPoemFont(DefaultTextStyle.of(ctx).style.merge(TextStyle(
@@ -2794,7 +2814,10 @@ class _PoemBodyState extends State<PoemBody> {
       final a = justifyHemistich(displayText(v.sadr), st, w);
       final b = justifyHemistich(displayText(v.ajz), st, w);
       if (!a.fits || !b.fits) allFit = false;
-      lines.add(_Line(a, b));
+      final hl = widget.highlight.isEmpty
+          ? (const <(int, int)>[], const <(int, int)>[])
+          : verseMatchRanges(a.text, b.text, widget.highlight);
+      lines.add(_Line(a, b, hl.$1, hl.$2));
     }
     _lines = lines;
     _w = w;
@@ -2803,12 +2826,14 @@ class _PoemBodyState extends State<PoemBody> {
     _allFit = allFit;
   }
 
-  Widget _hemistich(Justified j, Alignment align) => Align(
+  Widget _hemistich(Justified j, Alignment align,
+          [List<(int, int)> hl = const []]) =>
+      Align(
         alignment: align,
         child: SizedBox(
           width: _w,
-          child: Text(
-            j.text,
+          child: Text.rich(
+            highlightSpan(j.text, hl),
             textDirection: TextDirection.rtl,
             textAlign: TextAlign.right,
             textScaler: TextScaler.noScaling,
@@ -2831,22 +2856,39 @@ class _PoemBodyState extends State<PoemBody> {
         builder: (ctx, c) {
           final base = poemFontSize.value;
           final key =
-              '${widget.poem.title}|${c.maxWidth.toStringAsFixed(1)}|$base|${poemFontColor.value}|${poemFontWeightIndex.value}|${poemFontFamilyIndex.value}|${removeTashkeel.value}|${appDarkMode.value}';
+              '${widget.poem.title}|${c.maxWidth.toStringAsFixed(1)}|$base|${poemFontColor.value}|${poemFontWeightIndex.value}|${poemFontFamilyIndex.value}|${removeTashkeel.value}|${appDarkMode.value}|${widget.highlight}';
           if (key != _key) {
             _compute(ctx, c.maxWidth, base);
             _key = key;
           }
           final gap = _size * 0.95;
+          // أول بيت فيه تمييز: ننزل إليه مرة واحدة عند فتح القصيدة
+          final firstMatch = _lines.indexWhere(
+              (l) => l.sadrHl.isNotEmpty || l.ajzHl.isNotEmpty);
+          if (!_scrolled && firstMatch >= 0) {
+            _scrolled = true;
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              final c = _matchKey.currentContext;
+              if (!mounted || c == null) return;
+              Scrollable.ensureVisible(c,
+                  alignment: 0.3,
+                  duration: const Duration(milliseconds: 450),
+                  curve: Curves.easeInOut);
+            });
+          }
           return Column(
             children: [
               for (var i = 0; i < _lines.length; i++) ...[
                 Column(
+                  key: i == firstMatch ? _matchKey : null,
                   children: [
                     // الصدر: يبدأ من أقصى اليمين
-                    _hemistich(_lines[i].sadr, Alignment.centerRight),
+                    _hemistich(_lines[i].sadr, Alignment.centerRight,
+                        _lines[i].sadrHl),
                     SizedBox(height: _size * 0.45),
                     // العجز: تحته مباشرة، مزاح 8 مسافات لليسار
-                    _hemistich(_lines[i].ajz, Alignment.centerLeft),
+                    _hemistich(_lines[i].ajz, Alignment.centerLeft,
+                        _lines[i].ajzHl),
                   ],
                 ),
                 if (i < _lines.length - 1)
@@ -3652,6 +3694,121 @@ String normalizeArabic(String s) {
     }
   }
   return b.toString().replaceAll(RegExp(r'\s+'), ' ').trim();
+}
+
+// ───────────── تمييز نص البحث (هايلايت) ─────────────
+
+bool _ignorableUnit(int r) =>
+    (r >= 0x064B && r <= 0x065F) ||
+    r == 0x0670 ||
+    r == 0x0640 ||
+    (r >= 0x06D6 && r <= 0x06ED);
+
+/// نفس تطبيع [normalizeArabic] لكن مع خريطة ترجع بكل حرف إلى مكانه في النص الأصلي
+(String, List<int>) _normalizeWithMap(String s) {
+  final b = StringBuffer();
+  final map = <int>[];
+  for (var i = 0; i < s.length; i++) {
+    final r = s.codeUnitAt(i);
+    if (_ignorableUnit(r)) continue;
+    String ch;
+    switch (r) {
+      case 0x0622:
+      case 0x0623:
+      case 0x0625:
+      case 0x0671:
+        ch = 'ا';
+        break;
+      case 0x0649:
+        ch = 'ي';
+        break;
+      case 0x0629:
+        ch = 'ه';
+        break;
+      default:
+        ch = String.fromCharCode(r);
+    }
+    if (RegExp(r'\s').hasMatch(ch)) {
+      if (map.isEmpty || b.toString().endsWith(' ')) continue;
+      ch = ' ';
+    }
+    b.write(ch);
+    map.add(i);
+  }
+  var out = b.toString();
+  if (out.endsWith(' ')) {
+    out = out.substring(0, out.length - 1);
+    map.removeLast();
+  }
+  return (out, map);
+}
+
+/// يضمّ التشكيل والتطويل الذي يلي آخر حرف مطابق
+int _extendEnd(String text, int end) {
+  while (end < text.length && _ignorableUnit(text.codeUnitAt(end))) {
+    end++;
+  }
+  return end;
+}
+
+/// نطاقات (بداية، نهاية) التي يظهر فيها [q] (نص بحث مُطبَّع) داخل [text]
+List<(int, int)> findMatchRanges(String text, String q) {
+  if (q.isEmpty) return const [];
+  final (norm, map) = _normalizeWithMap(text);
+  final out = <(int, int)>[];
+  var from = 0;
+  while (true) {
+    final i = norm.indexOf(q, from);
+    if (i < 0) break;
+    final j = i + q.length;
+    out.add((map[i], _extendEnd(text, map[j - 1] + 1)));
+    from = j;
+  }
+  return out;
+}
+
+/// نطاقات التمييز في الصدر والعجز، مع حالة أن تمتدّ العبارة بينهما
+(List<(int, int)>, List<(int, int)>) verseMatchRanges(
+    String sadr, String ajz, String q) {
+  final s = findMatchRanges(sadr, q);
+  final a = findMatchRanges(ajz, q);
+  if (q.contains(' ')) {
+    final (sn, sm) = _normalizeWithMap(sadr);
+    final (an, am) = _normalizeWithMap(ajz);
+    for (var k = 1; k < q.length - 1; k++) {
+      if (q[k] != ' ') continue;
+      final pre = q.substring(0, k);
+      final post = q.substring(k + 1);
+      if (post.isEmpty || !sn.endsWith(pre) || !an.startsWith(post)) continue;
+      final si = sn.length - pre.length;
+      s.add((sm[si], _extendEnd(sadr, sm[sn.length - 1] + 1)));
+      a.add((am[0], _extendEnd(ajz, am[post.length - 1] + 1)));
+    }
+  }
+  return (s, a);
+}
+
+/// لون خلفية التمييز
+Color get highlightColor =>
+    const Color(0xFFFFD600).withOpacity(appDarkMode.value ? .38 : .6);
+
+/// يقسم [text] إلى أجزاء ويميّز النطاقات [ranges] بلون خلفية
+InlineSpan highlightSpan(String text, List<(int, int)> ranges,
+    {TextStyle? style}) {
+  if (ranges.isEmpty) return TextSpan(text: text, style: style);
+  final sorted = [...ranges]..sort((x, y) => x.$1.compareTo(y.$1));
+  final children = <InlineSpan>[];
+  var pos = 0;
+  for (final (st, en) in sorted) {
+    if (st < pos || en > text.length || st >= en) continue;
+    if (st > pos) children.add(TextSpan(text: text.substring(pos, st)));
+    children.add(TextSpan(
+        text: text.substring(st, en),
+        style: TextStyle(backgroundColor: highlightColor)));
+    pos = en;
+  }
+  if (pos < text.length) children.add(TextSpan(text: text.substring(pos)));
+  return TextSpan(style: style, children: children);
 }
 
 // ───────────── الكشيدة (التطويل) ─────────────
