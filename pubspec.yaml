@@ -11,6 +11,7 @@ dependencies:
     sdk: flutter
   flutter_localizations:
     sdk: flutter
+  shared_preferences: ^2.3.2
 
 dev_dependencies:
   flutter_test:
@@ -23,9 +24,26 @@ flutter:
   assets:
     - assets/images/green_dome.jpg
 
+  fonts:
+    - family: Amiri
+      fonts:
+        - asset: assets/fonts/amiri.ttf
+    - family: Scheherazade
+      fonts:
+        - asset: assets/fonts/scheherazade.ttf
+    - family: NotoNaskh
+      fonts:
+        - asset: assets/fonts/naskh.ttf
+    - family: Lateef
+      fonts:
+        - asset: assets/fonts/lateef.ttf
+    - family: ArefRuqaa
+      fonts:
+        - asset: assets/fonts/ruqaa.ttf
+
 flutter_launcher_icons:
   android: true
-  ios: false
+  ios: true
   image_path: assets/icons/app_icon.png
   adaptive_icon_background: '#293149'
   adaptive_icon_foreground: assets/icons/app_icon.png

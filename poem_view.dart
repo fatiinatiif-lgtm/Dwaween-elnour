@@ -2,10 +2,10 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'arabic_text.dart';
 import 'constants.dart';
+import 'font_settings.dart';
 import 'poems_data.dart';
 
-/// حجم خط القصيدة (يتحكم فيه من الإعدادات).
-final ValueNotifier<double> poemFontSize = ValueNotifier<double>(22);
+export 'font_settings.dart' show poemFontSize;
 
 class _Line {
   final Justified sadr;
@@ -28,12 +28,12 @@ class _PoemBodyState extends State<PoemBody> {
   bool _allFit = true;
 
   TextStyle _styleFor(BuildContext ctx, double size) =>
-      DefaultTextStyle.of(ctx).style.merge(TextStyle(
+      applyPoemFont(DefaultTextStyle.of(ctx).style.merge(TextStyle(
             fontSize: size,
             height: 1.0,
-            color: const Color(0xFF3E2723),
+            color: poemFontColor.value,
             fontWeight: FontWeight.w500,
-          ));
+          )));
 
   // عرض 8 مسافات بالخط الحالي
   double _indent(TextStyle st) =>
@@ -41,7 +41,7 @@ class _PoemBodyState extends State<PoemBody> {
 
   void _compute(BuildContext ctx, double avail, double base) {
     final texts = <String>[
-      for (final v in widget.poem.verses) ...[v.sadr, v.ajz]
+      for (final v in widget.poem.verses) ...[displayText(v.sadr), displayText(v.ajz)]
     ].map((t) => t.trim().replaceAll(RegExp(r'\s+'), ' ')).toList();
 
     var size = base;
@@ -59,8 +59,8 @@ class _PoemBodyState extends State<PoemBody> {
     var allFit = true;
     final lines = <_Line>[];
     for (final v in widget.poem.verses) {
-      final a = justifyHemistich(v.sadr, st, w);
-      final b = justifyHemistich(v.ajz, st, w);
+      final a = justifyHemistich(displayText(v.sadr), st, w);
+      final b = justifyHemistich(displayText(v.ajz), st, w);
       if (!a.fits || !b.fits) allFit = false;
       lines.add(_Line(a, b));
     }
@@ -93,11 +93,13 @@ class _PoemBodyState extends State<PoemBody> {
 
   @override
   Widget build(BuildContext context) {
-    return ValueListenableBuilder<double>(
-      valueListenable: poemFontSize,
-      builder: (ctx, base, _) => LayoutBuilder(
+    return ListenableBuilder(
+      listenable: poemSettings,
+      builder: (ctx, _) => LayoutBuilder(
         builder: (ctx, c) {
-          final key = '${widget.poem.title}|${c.maxWidth.toStringAsFixed(1)}|$base';
+          final base = poemFontSize.value;
+          final key =
+              '${widget.poem.title}|${c.maxWidth.toStringAsFixed(1)}|$base|${poemFontFamily.value}|${poemFontColor.value}|${removeTashkeel.value}';
           if (key != _key) {
             _compute(ctx, c.maxWidth, base);
             _key = key;
