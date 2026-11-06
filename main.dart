@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:share_plus/share_plus.dart';
 import 'poems_extra.dart';
 import 'pdf_export.dart';
 import 'saved_files.dart';
@@ -2305,11 +2304,7 @@ class PoemPage extends StatelessWidget {
             PoemFrame(
               child: Column(
                 children: [
-                  PoemBody(
-                      poem: poem,
-                      highlight: normalizeArabic(highlight),
-                      diwan: diwan,
-                      showTools: true),
+                  PoemBody(poem: poem, highlight: normalizeArabic(highlight)),
                   const _PoemFooter(),
                 ],
               ),
@@ -2770,14 +2765,7 @@ class _Line {
 class PoemBody extends StatefulWidget {
   final Poem poem;
   final String highlight; // نص البحث المُطبَّع، أو فارغ
-  final String diwan; // لحفظ البيت كصورة
-  final bool showTools; // شريط وضع الحفظ + ضغطة مطوّلة على البيت
-  const PoemBody(
-      {super.key,
-      required this.poem,
-      this.highlight = '',
-      this.diwan = '',
-      this.showTools = false});
+  const PoemBody({super.key, required this.poem, this.highlight = ''});
   @override
   State<PoemBody> createState() => _PoemBodyState();
 }
@@ -2790,150 +2778,6 @@ class _PoemBodyState extends State<PoemBody> {
   bool _allFit = true;
   final GlobalKey _matchKey = GlobalKey(); // أول بيت فيه نص البحث
   bool _scrolled = false;
-  int _memo = 0; // 0 قراءة، 1 إخفاء العجز، 2 إخفاء كلمات
-  final Set<int> _revealed = {}; // الأبيات التي أُظهرت بالضغط
-
-  // ───── وضع الحفظ ─────
-  List<(int, int)> _hiddenRanges(String text, int verseIdx, bool isAjz) {
-    if (_memo == 1) return isAjz ? [(0, text.length)] : const [];
-    final out = <(int, int)>[];
-    var w = 0, pos = 0;
-    for (final part in text.split(' ')) {
-      final st = pos;
-      pos += part.length + 1;
-      if (normalizeArabic(part).length < 3) continue;
-      if ((verseIdx * 31 + w * 17 + (isAjz ? 7 : 0)) % 5 < 2) {
-        out.add((st, st + part.length));
-      }
-      w++;
-    }
-    return out;
-  }
-
-  InlineSpan _hiddenSpan(String text, List<(int, int)> ranges) {
-    final bg = poemInk(poemFontColor.value).withOpacity(.16);
-    final children = <InlineSpan>[];
-    var pos = 0;
-    for (final (st, en) in ranges) {
-      if (st > pos) children.add(TextSpan(text: text.substring(pos, st)));
-      children.add(TextSpan(
-          text: text.substring(st, en),
-          style: TextStyle(color: Colors.transparent, backgroundColor: bg)));
-      pos = en;
-    }
-    if (pos < text.length) children.add(TextSpan(text: text.substring(pos)));
-    return TextSpan(children: children);
-  }
-
-  InlineSpan _spanFor(
-      Justified j, List<(int, int)> hl, int verseIdx, bool isAjz) {
-    final hidden = _memo != 0 && verseIdx >= 0 && !_revealed.contains(verseIdx);
-    return hidden
-        ? _hiddenSpan(j.text, _hiddenRanges(j.text, verseIdx, isAjz))
-        : highlightSpan(j.text, hl);
-  }
-
-  Widget _toolbar() => Padding(
-        padding: const EdgeInsets.only(bottom: 14),
-        child: Column(
-          children: [
-            Wrap(
-              alignment: WrapAlignment.center,
-              spacing: 8,
-              runSpacing: 6,
-              children: [
-                for (final o in const [
-                  (0, 'قراءة'),
-                  (1, 'إخفاء العجز'),
-                  (2, 'إخفاء كلمات'),
-                ])
-                  ChoiceChip(
-                    label: Text(o.$2,
-                        style: TextStyle(
-                            fontSize: 13.5,
-                            fontWeight: _memo == o.$1
-                                ? FontWeight.bold
-                                : FontWeight.normal,
-                            color: _memo == o.$1 ? Colors.white : brownDark)),
-                    selected: _memo == o.$1,
-                    showCheckmark: false,
-                    selectedColor: brown,
-                    backgroundColor: Colors.white,
-                    onSelected: (_) => setState(() {
-                      _memo = o.$1;
-                      _revealed.clear();
-                    }),
-                  ),
-              ],
-            ),
-            Padding(
-              padding: const EdgeInsets.only(top: 6),
-              child: Text(
-                  _memo == 0
-                      ? 'اضغطي مطولًا على أي بيت: مشاركة أو نسخ أو حفظ كصورة'
-                      : 'وضع الحفظ: اضغطي على أي بيت لإظهاره أو إخفائه',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 12, color: inkSoft)),
-            ),
-          ],
-        ),
-      );
-
-  // ───── مشاركة بيت ─────
-  String _verseText(Verse v) =>
-      '${displayText(v.sadr).trim()}\n${displayText(v.ajz).trim()}\n\n'
-      '— ${widget.poem.title}\n'
-      'كلمات شاعر رسول الله ﷺ / عبدالرحمن مصطفى الأزهري';
-
-  void _verseSheet(int i) {
-    final verses = widget.poem.verses;
-    final v = verses[i];
-    showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: cream,
-      builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 6),
-              child: Text('البيت ${arDigits(i + 1)}',
-                  style: TextStyle(
-                      fontSize: 17,
-                      fontWeight: FontWeight.bold,
-                      color: brown)),
-            ),
-            ListTile(
-              leading: Icon(Icons.share_rounded, color: brown),
-              title: const Text('مشاركة كنص (واتساب وغيره)'),
-              onTap: () {
-                Navigator.pop(ctx);
-                Share.share(_verseText(v));
-              },
-            ),
-            ListTile(
-              leading: Icon(Icons.copy_rounded, color: brown),
-              title: const Text('نسخ البيت'),
-              onTap: () {
-                Navigator.pop(ctx);
-                copyVerseText(context, widget.poem, v);
-              },
-            ),
-            if (widget.diwan.isNotEmpty)
-              ListTile(
-                leading: Icon(Icons.image_rounded, color: brown),
-                title: const Text('حفظ البيت كصورة'),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  showVerseImageSheet(context, widget.diwan, widget.poem, v);
-                },
-              ),
-            const SizedBox(height: 8),
-          ],
-        ),
-      ),
-    );
-  }
 
   TextStyle _styleFor(BuildContext ctx, double size) =>
       withPoemFont(DefaultTextStyle.of(ctx).style.merge(TextStyle(
@@ -2983,15 +2827,13 @@ class _PoemBodyState extends State<PoemBody> {
   }
 
   Widget _hemistich(Justified j, Alignment align,
-          [List<(int, int)> hl = const [],
-          int vi = -1,
-          bool isAjz = false]) =>
+          [List<(int, int)> hl = const []]) =>
       Align(
         alignment: align,
         child: SizedBox(
           width: _w,
           child: Text.rich(
-            _spanFor(j, hl, vi, isAjz),
+            highlightSpan(j.text, hl),
             textDirection: TextDirection.rtl,
             textAlign: TextAlign.right,
             textScaler: TextScaler.noScaling,
@@ -3036,28 +2878,18 @@ class _PoemBodyState extends State<PoemBody> {
           }
           return Column(
             children: [
-              if (widget.showTools) _toolbar(),
               for (var i = 0; i < _lines.length; i++) ...[
-                GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: _memo == 0
-                      ? null
-                      : () => setState(() {
-                            if (!_revealed.add(i)) _revealed.remove(i);
-                          }),
-                  onLongPress: widget.showTools ? () => _verseSheet(i) : null,
-                  child: Column(
+                Column(
                   key: i == firstMatch ? _matchKey : null,
                   children: [
                     // الصدر: يبدأ من أقصى اليمين
                     _hemistich(_lines[i].sadr, Alignment.centerRight,
-                        _lines[i].sadrHl, i, false),
+                        _lines[i].sadrHl),
                     SizedBox(height: _size * 0.45),
                     // العجز: تحته مباشرة، مزاح 8 مسافات لليسار
                     _hemistich(_lines[i].ajz, Alignment.centerLeft,
-                        _lines[i].ajzHl, i, true),
+                        _lines[i].ajzHl),
                   ],
-                  ),
                 ),
                 if (i < _lines.length - 1)
                   Padding(
