@@ -9,29 +9,273 @@ import 'pdf_export.dart';
 
 // ملف التطبيق الكامل (ما عدا القصائد: poems_data.dart)
 // الأقسام بالترتيب:
-//  1) الألوان والتطبيق والشاشات
+//  1) الثيمات (ألوان التطبيق) والتطبيق والشاشات
 //  2) عرض القصيدة (التصميم الإسلامي)
 //  3) صفحة إعدادات الخط
 //  4) إعدادات الخط (الحجم/اللون/التشكيل) وحفظها
 //  5) أدوات النص العربي (بحث + كشيدة)
 //  6) التاريخ الهجري والأرقام العربية
 
-// ───────────── ألوان التطبيق: بني وبيج ─────────────
-const brown = Color(0xFF6D4C41);
-const brownDark = Color(0xFF3E2723);
-const beige = Color(0xFFF5ECDC);
-const cream = Color(0xFFFFFBF2);
-const accentGold = Color(0xFFC9A24B);
+// ════════════════════════════════════════════════
+// الثيمات: ألوان التطبيق كلها تُقرأ من الثيم المختار
+// ════════════════════════════════════════════════
+
+/// خط كلمة "سيد الشعراء" في شاشة البداية.
+/// غيّريه لأي family من pubspec.yaml:
+/// 'ArefRuqaa' (رقعة) • 'Amoshref' (ثلث المشرف) • 'WinsoftThuluth' • 'DecoThuluth'
+const String kSplashFont = 'ArefRuqaa';
+
+class AppPalette {
+  final String label;
+  final Color primary; // الأزرار والشريط العلوي والأيقونات
+  final Color primaryDark; // نهاية التدرّج
+  final Color bg; // خلفية التطبيق
+  final Color card; // خلفية البطاقات
+  final Color accent; // الذهبي / لون الزخرفة
+  final Color paper; // ورقة القصيدة (تبقى فاتحة حتى في الثيمات الداكنة)
+  final Color ink; // لون العناوين والنصوص الأساسية
+  final Color inkSoft; // لون النصوص الثانوية
+  final bool dark;
+  const AppPalette({
+    required this.label,
+    required this.primary,
+    required this.primaryDark,
+    required this.bg,
+    required this.card,
+    required this.accent,
+    required this.paper,
+    required this.ink,
+    required this.inkSoft,
+    this.dark = false,
+  });
+}
+
+const appPalettes = <AppPalette>[
+  AppPalette(
+      label: 'بني وذهبي',
+      primary: Color(0xFF6D4C41),
+      primaryDark: Color(0xFF3E2723),
+      bg: Color(0xFFF5ECDC),
+      card: Color(0xFFFFFBF2),
+      accent: Color(0xFFC9A24B),
+      paper: Color(0xFFFFFBF2),
+      ink: Color(0xFF3E2723),
+      inkSoft: Color(0xFF7A6A62)),
+  AppPalette(
+      label: 'أخضر زمردي',
+      primary: Color(0xFF2E6B4F),
+      primaryDark: Color(0xFF143D2B),
+      bg: Color(0xFFE8F1EA),
+      card: Color(0xFFF8FCF9),
+      accent: Color(0xFFC9A24B),
+      paper: Color(0xFFF8FCF9),
+      ink: Color(0xFF14301F),
+      inkSoft: Color(0xFF5B7566)),
+  AppPalette(
+      label: 'أزرق ملكي',
+      primary: Color(0xFF2C4A8A),
+      primaryDark: Color(0xFF14264F),
+      bg: Color(0xFFE8EDF6),
+      card: Color(0xFFF8FAFD),
+      accent: Color(0xFFD4AF37),
+      paper: Color(0xFFF8FAFD),
+      ink: Color(0xFF14213D),
+      inkSoft: Color(0xFF5C6980)),
+  AppPalette(
+      label: 'عنابي',
+      primary: Color(0xFF7B1F2E),
+      primaryDark: Color(0xFF4A0F1B),
+      bg: Color(0xFFF6E9EA),
+      card: Color(0xFFFFF9F9),
+      accent: Color(0xFFC9A24B),
+      paper: Color(0xFFFFF9F9),
+      ink: Color(0xFF3D0F18),
+      inkSoft: Color(0xFF80595F)),
+  AppPalette(
+      label: 'بنفسجي',
+      primary: Color(0xFF5B3A8E),
+      primaryDark: Color(0xFF33204F),
+      bg: Color(0xFFEFEAF6),
+      card: Color(0xFFFBF9FE),
+      accent: Color(0xFFD4AF37),
+      paper: Color(0xFFFBF9FE),
+      ink: Color(0xFF2A1B40),
+      inkSoft: Color(0xFF6E6382)),
+  AppPalette(
+      label: 'تركوازي',
+      primary: Color(0xFF00796B),
+      primaryDark: Color(0xFF004D43),
+      bg: Color(0xFFE2F1EF),
+      card: Color(0xFFF7FCFB),
+      accent: Color(0xFFD9B44A),
+      paper: Color(0xFFF7FCFB),
+      ink: Color(0xFF053B35),
+      inkSoft: Color(0xFF50706C)),
+  AppPalette(
+      label: 'وردي ملكي',
+      primary: Color(0xFF9C2F63),
+      primaryDark: Color(0xFF5E1239),
+      bg: Color(0xFFF8E9F0),
+      card: Color(0xFFFFF8FB),
+      accent: Color(0xFFE0B341),
+      paper: Color(0xFFFFF8FB),
+      ink: Color(0xFF4A1030),
+      inkSoft: Color(0xFF80596D)),
+  AppPalette(
+      label: 'رمادي أنيق',
+      primary: Color(0xFF455A64),
+      primaryDark: Color(0xFF263238),
+      bg: Color(0xFFECEFF1),
+      card: Color(0xFFFAFBFC),
+      accent: Color(0xFFC9A24B),
+      paper: Color(0xFFFAFBFC),
+      ink: Color(0xFF1F2A30),
+      inkSoft: Color(0xFF62717A)),
+  AppPalette(
+      label: 'صحراوي',
+      primary: Color(0xFFA1481A),
+      primaryDark: Color(0xFF6B2D0E),
+      bg: Color(0xFFF7EADD),
+      card: Color(0xFFFFF9F2),
+      accent: Color(0xFFD9A441),
+      paper: Color(0xFFFFF9F2),
+      ink: Color(0xFF4A2410),
+      inkSoft: Color(0xFF82614F)),
+  AppPalette(
+      label: 'أزرق سماوي',
+      primary: Color(0xFF0277BD),
+      primaryDark: Color(0xFF01497A),
+      bg: Color(0xFFE6F1F8),
+      card: Color(0xFFF7FBFE),
+      accent: Color(0xFFC9A24B),
+      paper: Color(0xFFF7FBFE),
+      ink: Color(0xFF0B2F4A),
+      inkSoft: Color(0xFF5A7184)),
+  AppPalette(
+      label: 'ليل أزرق',
+      primary: Color(0xFF4A6FA5),
+      primaryDark: Color(0xFF1B2A41),
+      bg: Color(0xFF11151B),
+      card: Color(0xFF1B212B),
+      accent: Color(0xFFE0B955),
+      paper: Color(0xFFF4ECD8),
+      ink: Color(0xFFF1EBDD),
+      inkSoft: Color(0xFFB5B2A8),
+      dark: true),
+  AppPalette(
+      label: 'ليل ذهبي',
+      primary: Color(0xFF9A6B45),
+      primaryDark: Color(0xFF2A1D16),
+      bg: Color(0xFF17110E),
+      card: Color(0xFF241A15),
+      accent: Color(0xFFD4AF37),
+      paper: Color(0xFFF4E9D2),
+      ink: Color(0xFFF3E8D4),
+      inkSoft: Color(0xFFBBAE9B),
+      dark: true),
+];
+
+/// فهرس الثيم المختار (يُحفظ على الهاتف)
+final ValueNotifier<int> appThemeIndex = ValueNotifier<int>(0);
+
+AppPalette get currentPalette => appPalettes[appThemeIndex.value];
+
+// أسماء الألوان القديمة بقيت كما هي، لكنها الآن تتبع الثيم المختار
+Color get brown => currentPalette.primary;
+Color get brownDark => currentPalette.primaryDark;
+Color get beige => currentPalette.bg;
+Color get cream => currentPalette.card;
+Color get accentGold => currentPalette.accent;
+Color get paperColor => currentPalette.paper;
+Color get ink => currentPalette.ink;
+Color get inkSoft => currentPalette.inkSoft;
+
+Future<void> loadAppTheme() async {
+  try {
+    final p = await SharedPreferences.getInstance();
+    final i = p.getInt('appThemeIndex');
+    if (i != null && i >= 0 && i < appPalettes.length) {
+      appThemeIndex.value = i;
+    }
+    appThemeIndex
+        .addListener(() => p.setInt('appThemeIndex', appThemeIndex.value));
+  } catch (_) {
+    // لو فشل الحفظ يشتغل التطبيق بالثيم الافتراضي
+  }
+}
+
+ThemeData _buildTheme(AppPalette p) {
+  final scheme = ColorScheme.fromSeed(
+    seedColor: p.primary,
+    brightness: p.dark ? Brightness.dark : Brightness.light,
+  );
+  return ThemeData(
+    useMaterial3: true,
+    scaffoldBackgroundColor: p.bg,
+    colorScheme: scheme,
+    appBarTheme: AppBarTheme(
+      backgroundColor: p.primary,
+      foregroundColor: Colors.white,
+      centerTitle: true,
+      elevation: 0,
+      scrolledUnderElevation: 0,
+    ),
+    dividerTheme: DividerThemeData(color: p.accent.withOpacity(.35)),
+    snackBarTheme: SnackBarThemeData(
+      backgroundColor: p.primaryDark,
+      contentTextStyle: const TextStyle(color: Colors.white),
+      behavior: SnackBarBehavior.floating,
+    ),
+  );
+}
+
+/// يجبر كل الشاشات (حتى الثابتة const) على إعادة البناء بالألوان الجديدة
+void _rebuildAll(Element el) {
+  el.markNeedsBuild();
+  el.visitChildren(_rebuildAll);
+}
+
+List<BoxShadow> _softShadow([double a = .12]) => [
+      BoxShadow(
+          color: Colors.black.withOpacity(a),
+          blurRadius: 12,
+          offset: const Offset(0, 4)),
+    ];
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await loadFontSettings();
   await loadFavorites();
+  await loadAppTheme();
   runApp(const DiwanApp());
 }
 
-class DiwanApp extends StatelessWidget {
+class DiwanApp extends StatefulWidget {
   const DiwanApp({super.key});
+  @override
+  State<DiwanApp> createState() => _DiwanAppState();
+}
+
+class _DiwanAppState extends State<DiwanApp> {
+  @override
+  void initState() {
+    super.initState();
+    appThemeIndex.addListener(_onTheme);
+  }
+
+  @override
+  void dispose() {
+    appThemeIndex.removeListener(_onTheme);
+    super.dispose();
+  }
+
+  void _onTheme() {
+    if (!mounted) return;
+    setState(() {});
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) (context as Element).visitChildren(_rebuildAll);
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -45,16 +289,7 @@ class DiwanApp extends StatelessWidget {
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
       ],
-      theme: ThemeData(
-        useMaterial3: true,
-        scaffoldBackgroundColor: beige,
-        colorScheme: ColorScheme.fromSeed(seedColor: brown),
-        appBarTheme: const AppBarTheme(
-          backgroundColor: brown,
-          foregroundColor: Colors.white,
-          centerTitle: true,
-        ),
-      ),
+      theme: _buildTheme(currentPalette),
       home: const SplashScreen(),
     );
   }
@@ -71,15 +306,20 @@ class _SplashScreenState extends State<SplashScreen> {
   int count = 5;
   Timer? timer;
 
-  // خط شاشة البداية (غيّري اسم الخط هنا لأي family من pubspec.yaml)
-  TextStyle _splashStyle() => const TextStyle(
-      fontFamily: 'DecoThuluth',
-      color: Colors.white,
-      fontSize: 84,
-      height: 1.3,
+  // ذهبي متدرّج للكلمات + ظل ناعم
+  TextStyle _splashStyle() => TextStyle(
+      fontFamily: kSplashFont,
+      fontSize: 88,
+      height: 1.25,
       fontWeight: FontWeight.w700,
-      shadows: [
-        Shadow(color: Color(0x66000000), blurRadius: 8, offset: Offset(0, 3)),
+      foreground: Paint()
+        ..shader = const LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Color(0xFFFFF1C1), Color(0xFFE6C26B), Color(0xFFB98A2E)],
+        ).createShader(const Rect.fromLTWH(0, 0, 400, 120)),
+      shadows: const [
+        Shadow(color: Color(0x80000000), blurRadius: 10, offset: Offset(0, 4)),
       ]);
 
   @override
@@ -104,40 +344,85 @@ class _SplashScreenState extends State<SplashScreen> {
     super.dispose();
   }
 
+  Widget _word(String t) => Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 24),
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(t, style: _splashStyle()),
+        ),
+      );
+
   @override
   Widget build(BuildContext context) => Scaffold(
         body: Container(
           width: double.infinity,
-          decoration: const BoxDecoration(
+          height: double.infinity,
+          decoration: BoxDecoration(
             gradient: LinearGradient(
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
               colors: [brown, brownDark],
             ),
           ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
+          child: Stack(
             children: [
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24),
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  child: Text('سيد', style: _splashStyle()),
+              Positioned.fill(
+                  child: RepaintBoundary(
+                      child: CustomPaint(painter: _PatternPainter(k: 1.3)))),
+              Positioned.fill(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: RadialGradient(
+                      radius: 1.0,
+                      colors: [
+                        Colors.transparent,
+                        Colors.black.withOpacity(.38)
+                      ],
+                    ),
+                  ),
                 ),
               ),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24),
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  child: Text('الشعراء', style: _splashStyle()),
+              SafeArea(
+                child: Column(
+                  children: [
+                    const Spacer(flex: 3),
+                    CustomPaint(
+                        size: const Size(30, 30),
+                        painter: _StarPainter(accentGold)),
+                    const SizedBox(height: 14),
+                    _word('سيد'),
+                    _word('الشعراء'),
+                    const SizedBox(height: 12),
+                    const SizedBox(
+                        width: 190, child: OrnamentDivider()),
+                    const SizedBox(height: 12),
+                    Text('دواوين النور',
+                        style: TextStyle(
+                            color: accentGold,
+                            fontSize: 17,
+                            letterSpacing: 1.2,
+                            fontWeight: FontWeight.w600)),
+                    const Spacer(flex: 3),
+                    Container(
+                      width: 64,
+                      height: 64,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: Colors.black.withOpacity(.18),
+                        border: Border.all(
+                            color: accentGold.withOpacity(.8), width: 1.5),
+                      ),
+                      child: Text(arDigits(count),
+                          style: TextStyle(
+                              color: accentGold,
+                              fontSize: 30,
+                              fontWeight: FontWeight.w600)),
+                    ),
+                    const SizedBox(height: 40),
+                  ],
                 ),
               ),
-              const SizedBox(height: 40),
-              Text(arDigits(count),
-                  style: const TextStyle(
-                      color: accentGold,
-                      fontSize: 48,
-                      fontWeight: FontWeight.w600)),
             ],
           ),
         ),
@@ -186,7 +471,7 @@ class _FancyBottomBar extends StatelessWidget {
             margin: const EdgeInsets.fromLTRB(14, 6, 14, 10),
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
             decoration: BoxDecoration(
-              gradient: const LinearGradient(
+              gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
                   colors: [brown, brownDark]),
@@ -221,7 +506,7 @@ class _FancyBottomBar extends StatelessWidget {
                                 size: 30,
                                 color: selected == i
                                     ? brownDark
-                                    : beige.withOpacity(.8)),
+                                    : Colors.white.withOpacity(.82)),
                             const SizedBox(height: 2),
                             Text(_items[i].$2,
                                 style: TextStyle(
@@ -231,7 +516,7 @@ class _FancyBottomBar extends StatelessWidget {
                                         : FontWeight.w500,
                                     color: selected == i
                                         ? brownDark
-                                        : beige.withOpacity(.8))),
+                                        : Colors.white.withOpacity(.82))),
                           ],
                         ),
                       ),
@@ -297,30 +582,34 @@ class _HomePageState extends State<HomePage> {
       child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 18, 16, 24),
         children: [
-          const Text('ابحث داخل النصوص كلها',
-              style: TextStyle(
-                  color: brown, fontSize: 16, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 8),
-          TextField(
-            controller: controller,
-            onChanged: (_) => setState(() {}),
-            decoration: InputDecoration(
-              hintText: 'اكتب كلمة أو عبارة من أي قصيدة',
-              prefixIcon: const Icon(Icons.search, color: brown),
-              suffixIcon: searching
-                  ? IconButton(
-                      icon: const Icon(Icons.close),
-                      onPressed: () => setState(controller.clear))
-                  : null,
-              filled: true,
-              fillColor: cream,
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(16),
-                borderSide: BorderSide(color: accentGold.withOpacity(.6)),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(16),
-                borderSide: const BorderSide(color: brown, width: 1.6),
+          Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(18),
+              boxShadow: _softShadow(.10),
+            ),
+            child: TextField(
+              controller: controller,
+              onChanged: (_) => setState(() {}),
+              decoration: InputDecoration(
+                hintText: 'ابحث داخل النصوص كلها: كلمة أو عبارة',
+                hintStyle: TextStyle(color: inkSoft, fontSize: 14),
+                prefixIcon: Icon(Icons.search_rounded, color: brown),
+                suffixIcon: searching
+                    ? IconButton(
+                        icon: const Icon(Icons.close_rounded),
+                        onPressed: () => setState(controller.clear))
+                    : null,
+                filled: true,
+                fillColor: cream,
+                contentPadding: const EdgeInsets.symmetric(vertical: 16),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(18),
+                  borderSide: BorderSide(color: accentGold.withOpacity(.6)),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(18),
+                  borderSide: BorderSide(color: brown, width: 1.6),
+                ),
               ),
             ),
           ),
@@ -333,7 +622,7 @@ class _HomePageState extends State<HomePage> {
               _DomeFrame(),
             ],
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 26),
           if (searching) ...[
             const SectionHeading('نتائج البحث'),
             if (results.isEmpty)
@@ -364,22 +653,20 @@ class _DomeFrame extends StatelessWidget {
   Widget build(BuildContext context) => Container(
         padding: const EdgeInsets.all(3),
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(22),
-          gradient: const LinearGradient(
-              colors: [Color(0xFFE6C26B), accentGold, Color(0xFF9A7428)]),
-          boxShadow: [
-            BoxShadow(
-                color: Colors.black.withOpacity(.18),
-                blurRadius: 8,
-                offset: const Offset(0, 3)),
-          ],
+          borderRadius: BorderRadius.circular(24),
+          gradient: LinearGradient(colors: [
+            Color.lerp(accentGold, Colors.white, .35)!,
+            accentGold,
+            Color.lerp(accentGold, Colors.black, .35)!,
+          ]),
+          boxShadow: _softShadow(.22),
         ),
         child: Container(
           padding: const EdgeInsets.all(3),
           decoration: BoxDecoration(
-              color: beige, borderRadius: BorderRadius.circular(19)),
+              color: beige, borderRadius: BorderRadius.circular(21)),
           child: ClipRRect(
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(18),
             child: Image.asset('assets/images/green_dome.jpg',
                 width: 120, height: 138, fit: BoxFit.cover),
           ),
@@ -422,24 +709,53 @@ class _ClockAndDatesState extends State<_ClockAndDates> {
     final hj = toHijri(now);
     final hijri = '${arDigits(hj.day)} ${hj.monthName} ${arDigits(hj.year)} هـ';
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
       decoration: BoxDecoration(
-        color: cream,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: accentGold.withOpacity(.5)),
+        gradient: LinearGradient(
+          begin: Alignment.topRight,
+          end: Alignment.bottomLeft,
+          colors: [cream, Color.lerp(cream, accentGold, .16)!],
+        ),
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: accentGold.withOpacity(.6)),
+        boxShadow: _softShadow(.10),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(time,
-              style: const TextStyle(
-                  fontSize: 20, fontWeight: FontWeight.bold, color: brown)),
-          const SizedBox(height: 6),
-          Text(greg,
-              style: const TextStyle(fontSize: 12.5, color: Colors.black87)),
+          Row(
+            children: [
+              CustomPaint(
+                  size: const Size(16, 16), painter: _StarPainter(accentGold)),
+              const SizedBox(width: 8),
+              Expanded(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: AlignmentDirectional.centerStart,
+                  child: Text(time,
+                      style: TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                          color: brown)),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Container(
+            height: 1,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: AlignmentDirectional.centerStart,
+                end: AlignmentDirectional.centerEnd,
+                colors: [accentGold, accentGold.withOpacity(0)],
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(greg, style: TextStyle(fontSize: 12.5, color: ink)),
           const SizedBox(height: 3),
-          Text(hijri,
-              style: const TextStyle(fontSize: 12.5, color: Colors.black54)),
+          Text(hijri, style: TextStyle(fontSize: 12.5, color: inkSoft)),
         ],
       ),
     );
@@ -462,6 +778,7 @@ class DiwansPage extends StatelessWidget {
       );
 }
 
+/// بطاقة الديوان: تدرّج + إطار مذهّب داخلي + نجمة ترقيم + نقش خفيف
 class DiwanTile extends StatelessWidget {
   final String name;
   final int number;
@@ -471,29 +788,44 @@ class DiwanTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final count = (poems[name] ?? []).length;
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.only(bottom: 14),
       child: Container(
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(20),
-          gradient: const LinearGradient(
+          borderRadius: BorderRadius.circular(24),
+          gradient: LinearGradient(
               begin: Alignment.topRight,
               end: Alignment.bottomLeft,
               colors: [brown, brownDark]),
-          border: Border.all(color: accentGold, width: 1.4),
-          boxShadow: [
-            BoxShadow(
-                color: Colors.black.withOpacity(.22),
-                blurRadius: 8,
-                offset: const Offset(0, 3)),
-          ],
+          boxShadow: _softShadow(.25),
         ),
         child: ClipRRect(
-          borderRadius: BorderRadius.circular(18),
+          borderRadius: BorderRadius.circular(24),
           child: Stack(
             children: [
               Positioned.fill(
                   child: RepaintBoundary(
-                      child: CustomPaint(painter: _PatternPainter()))),
+                      child: CustomPaint(painter: _PatternPainter(k: .9)))),
+              // نجمة كبيرة باهتة في الزاوية
+              PositionedDirectional(
+                end: -34,
+                bottom: -40,
+                child: CustomPaint(
+                    size: const Size(150, 150),
+                    painter: _StarPainter(accentGold.withOpacity(.13))),
+              ),
+              // إطار مذهّب داخلي
+              Positioned.fill(
+                child: Padding(
+                  padding: const EdgeInsets.all(5),
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(19),
+                      border:
+                          Border.all(color: accentGold.withOpacity(.65), width: 1),
+                    ),
+                  ),
+                ),
+              ),
               Material(
                 color: Colors.transparent,
                 child: InkWell(
@@ -503,42 +835,65 @@ class DiwanTile extends StatelessWidget {
                           builder: (_) => DiwanDetailPage(name: name))),
                   child: Padding(
                     padding:
-                        const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+                        const EdgeInsets.symmetric(horizontal: 18, vertical: 18),
                     child: Row(
                       children: [
                         _NumberStar(
                             number: number,
-                            size: 56,
+                            size: 60,
                             fill: accentGold,
-                            textColor: brownDark),
-                        const SizedBox(width: 14),
+                            textColor: brownDark,
+                            stroke: Colors.white.withOpacity(.7)),
+                        const SizedBox(width: 16),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(name,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
                                   style: const TextStyle(
                                       color: Colors.white,
-                                      fontSize: 17,
-                                      height: 1.4,
+                                      fontSize: 17.5,
+                                      height: 1.45,
                                       fontWeight: FontWeight.bold)),
-                              const SizedBox(height: 5),
-                              Row(
-                                children: [
-                                  const Icon(Icons.auto_stories_rounded,
-                                      size: 15, color: accentGold),
-                                  const SizedBox(width: 5),
-                                  Text('${arDigits(count)} قصيدة',
-                                      style: const TextStyle(
-                                          color: Color(0xFFE8D9BC),
-                                          fontSize: 12.5)),
-                                ],
+                              const SizedBox(height: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 10, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: Colors.black.withOpacity(.22),
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(
+                                      color: accentGold.withOpacity(.5)),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.auto_stories_rounded,
+                                        size: 14, color: accentGold),
+                                    const SizedBox(width: 6),
+                                    Text('${arDigits(count)} قصيدة',
+                                        style: const TextStyle(
+                                            color: Color(0xFFE8D9BC),
+                                            fontSize: 12.5)),
+                                  ],
+                                ),
                               ),
                             ],
                           ),
                         ),
-                        const Icon(Icons.chevron_left_rounded,
-                            color: accentGold, size: 30),
+                        const SizedBox(width: 8),
+                        Container(
+                          width: 36,
+                          height: 36,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(color: accentGold, width: 1.2),
+                          ),
+                          child: Icon(Icons.chevron_left_rounded,
+                              color: accentGold, size: 26),
+                        ),
                       ],
                     ),
                   ),
@@ -552,17 +907,21 @@ class DiwanTile extends StatelessWidget {
   }
 }
 
-/// نجمة ثمانية يتوسطها رقم
+/// نجمة ثمانية يتوسطها رقم (أو أيقونة)
 class _NumberStar extends StatelessWidget {
-  final int number;
+  final int? number;
+  final IconData? icon;
   final double size;
   final Color fill;
   final Color textColor;
+  final Color? stroke;
   const _NumberStar({
-    required this.number,
+    this.number,
+    this.icon,
     required this.size,
     required this.fill,
     required this.textColor,
+    this.stroke,
   });
   @override
   Widget build(BuildContext context) => SizedBox(
@@ -571,38 +930,96 @@ class _NumberStar extends StatelessWidget {
         child: Stack(
           alignment: Alignment.center,
           children: [
-            CustomPaint(size: Size(size, size), painter: _StarPainter(fill)),
-            Text(arDigits(number),
-                style: TextStyle(
-                    color: textColor,
-                    fontWeight: FontWeight.bold,
-                    fontSize: size * .3)),
+            CustomPaint(
+                size: Size(size, size), painter: _StarPainter(fill, stroke)),
+            if (icon != null)
+              Icon(icon, color: textColor, size: size * .42)
+            else
+              Text(arDigits(number ?? 0),
+                  style: TextStyle(
+                      color: textColor,
+                      fontWeight: FontWeight.bold,
+                      fontSize: size * .3)),
           ],
         ),
       );
 }
 
-class DiwanDetailPage extends StatelessWidget {
+class DiwanDetailPage extends StatefulWidget {
   final String name;
   const DiwanDetailPage({super.key, required this.name});
   @override
+  State<DiwanDetailPage> createState() => _DiwanDetailPageState();
+}
+
+class _DiwanDetailPageState extends State<DiwanDetailPage> {
+  final ctrl = TextEditingController();
+
+  @override
+  void dispose() {
+    ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final list = poems[name] ?? [];
+    final list = poems[widget.name] ?? <Poem>[];
+    final q = normalizeArabic(ctrl.text);
+    final shown = <MapEntry<int, Poem>>[
+      for (var i = 0; i < list.length; i++)
+        if (q.isEmpty || normalizeArabic(list[i].title).contains(q))
+          MapEntry(i, list[i]),
+    ];
     return Scaffold(
-      appBar: AppBar(title: Text(name, style: const TextStyle(fontSize: 16))),
+      appBar:
+          AppBar(title: Text(widget.name, style: const TextStyle(fontSize: 16))),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
         children: [
-          PoemHeader(title: name, diwan: '${arDigits(list.length)} قصيدة'),
+          PoemHeader(
+              title: widget.name, diwan: '${arDigits(list.length)} قصيدة'),
           const SizedBox(height: 18),
+          if (list.length > 5) ...[
+            TextField(
+              controller: ctrl,
+              onChanged: (_) => setState(() {}),
+              decoration: InputDecoration(
+                hintText: 'ابحث في عناوين قصائد هذا الديوان',
+                hintStyle: TextStyle(color: inkSoft, fontSize: 14),
+                prefixIcon: Icon(Icons.search_rounded, color: brown),
+                suffixIcon: q.isNotEmpty
+                    ? IconButton(
+                        icon: const Icon(Icons.close_rounded),
+                        onPressed: () => setState(ctrl.clear))
+                    : null,
+                filled: true,
+                fillColor: cream,
+                contentPadding: const EdgeInsets.symmetric(vertical: 14),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide: BorderSide(color: accentGold.withOpacity(.6)),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide: BorderSide(color: brown, width: 1.6),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+          ],
           if (list.isEmpty)
             const Padding(
               padding: EdgeInsets.all(24),
               child: Center(child: Text('ستظهر القصائد هنا عند إضافتها.')),
             )
+          else if (shown.isEmpty)
+            const Padding(
+              padding: EdgeInsets.all(24),
+              child: Center(child: Text('لا توجد قصائد مطابقة.')),
+            )
           else
-            for (var i = 0; i < list.length; i++)
-              PoemTile(poem: list[i], diwan: name, number: i + 1),
+            for (final e in shown)
+              PoemTile(poem: e.value, diwan: widget.name, number: e.key + 1),
         ],
       ),
     );
@@ -623,80 +1040,142 @@ class PoemTile extends StatelessWidget {
     this.snippet = '',
   });
 
+  Widget _meta(IconData icon, String text) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        decoration: BoxDecoration(
+          color: brown.withOpacity(.08),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 13, color: accentGold),
+            const SizedBox(width: 5),
+            Flexible(
+              child: Text(text,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 12, color: inkSoft)),
+            ),
+          ],
+        ),
+      );
+
   @override
   Widget build(BuildContext context) {
     final count = versesLabel(poem.verses.length);
-    final sub = number == null ? '$diwan  •  $count' : count;
     return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Material(
-        color: cream,
-        elevation: 1.5,
-        shadowColor: Colors.black38,
-        clipBehavior: Clip.antiAlias,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-          side: BorderSide(color: accentGold.withOpacity(.55)),
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Container(
+        decoration: BoxDecoration(
+          color: cream,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: accentGold.withOpacity(.45)),
+          boxShadow: _softShadow(.10),
         ),
-        child: InkWell(
-          onTap: () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                  builder: (_) => PoemPage(poem: poem, diwan: diwan))),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(4, 10, 12, 10),
-            child: Row(
-              children: [
-                if (number != null)
-                  _NumberStar(
-                      number: number!,
-                      size: 46,
-                      fill: brown,
-                      textColor: accentGold)
-                else
-                  Container(
-                    width: 44,
-                    height: 44,
-                    decoration: const BoxDecoration(
-                        shape: BoxShape.circle, color: brown),
-                    child: const Icon(Icons.menu_book_rounded,
-                        color: accentGold, size: 22),
-                  ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(poem.title,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                              fontSize: 16,
-                              height: 1.35,
-                              fontWeight: FontWeight.w700,
-                              color: brownDark)),
-                      const SizedBox(height: 3),
-                      Text(sub,
-                          style: const TextStyle(
-                              fontSize: 12, color: Colors.black54)),
-                      if (snippet.isNotEmpty) ...[
-                        const SizedBox(height: 4),
-                        Text(snippet,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                                fontSize: 12.5,
-                                height: 1.4,
-                                color: Colors.black54)),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(17),
+          child: Stack(
+            children: [
+              // شريط ذهبي على الجانب
+              PositionedDirectional(
+                start: 0,
+                top: 0,
+                bottom: 0,
+                child: Container(
+                  width: 5,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        accentGold,
+                        Color.lerp(accentGold, brownDark, .35)!
                       ],
-                    ],
+                    ),
                   ),
                 ),
-                FavButton(diwan: diwan, poem: poem),
-                const Icon(Icons.chevron_left_rounded,
-                    color: accentGold, size: 26),
-              ],
-            ),
+              ),
+              Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) => PoemPage(poem: poem, diwan: diwan))),
+                  child: Padding(
+                    padding: const EdgeInsetsDirectional.fromSTEB(16, 12, 4, 12),
+                    child: Row(
+                      children: [
+                        if (number != null)
+                          _NumberStar(
+                              number: number,
+                              size: 46,
+                              fill: brown,
+                              textColor: Colors.white,
+                              stroke: accentGold)
+                        else
+                          _NumberStar(
+                              icon: Icons.menu_book_rounded,
+                              size: 46,
+                              fill: brown,
+                              textColor: Colors.white,
+                              stroke: accentGold),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(poem.title,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                      fontSize: 16,
+                                      height: 1.4,
+                                      fontWeight: FontWeight.w700,
+                                      color: ink)),
+                              const SizedBox(height: 6),
+                              Wrap(
+                                spacing: 6,
+                                runSpacing: 4,
+                                children: [
+                                  if (number == null)
+                                    _meta(Icons.collections_bookmark_rounded,
+                                        diwan),
+                                  _meta(Icons.format_list_numbered_rounded,
+                                      count),
+                                ],
+                              ),
+                              if (snippet.isNotEmpty) ...[
+                                const SizedBox(height: 8),
+                                Container(
+                                  width: double.infinity,
+                                  padding: const EdgeInsets.all(8),
+                                  decoration: BoxDecoration(
+                                    color: accentGold.withOpacity(.10),
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: Text(snippet,
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                          fontSize: 12.5,
+                                          height: 1.45,
+                                          color: inkSoft)),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                        FavButton(diwan: diwan, poem: poem),
+                        Icon(Icons.chevron_left_rounded,
+                            color: accentGold, size: 26),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -743,7 +1222,7 @@ Future<void> loadFavorites() async {
 class FavButton extends StatelessWidget {
   final String diwan;
   final Poem poem;
-  final bool dark; // true = فوق شريط بني (أبيض)
+  final bool dark; // true = فوق شريط ملوّن (أبيض)
   final double size;
   const FavButton({
     super.key,
@@ -817,23 +1296,34 @@ class _EmptyFavorites extends StatelessWidget {
   const _EmptyFavorites();
   @override
   Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 34),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 38),
         decoration: BoxDecoration(
           color: cream,
-          borderRadius: BorderRadius.circular(18),
+          borderRadius: BorderRadius.circular(22),
           border: Border.all(color: accentGold.withOpacity(.5)),
+          boxShadow: _softShadow(.08),
         ),
-        child: const Column(
+        child: Column(
           children: [
-            Icon(Icons.favorite_border_rounded, size: 64, color: accentGold),
-            SizedBox(height: 14),
+            Container(
+              width: 84,
+              height: 84,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: accentGold.withOpacity(.14),
+                border: Border.all(color: accentGold.withOpacity(.6)),
+              ),
+              child: Icon(Icons.favorite_border_rounded,
+                  size: 44, color: accentGold),
+            ),
+            const SizedBox(height: 16),
             Text('لا توجد قصائد في المفضلة بعد',
                 style: TextStyle(
                     fontSize: 17, fontWeight: FontWeight.bold, color: brown)),
-            SizedBox(height: 8),
+            const SizedBox(height: 8),
             Text('اضغط على علامة القلب بجانب أي قصيدة لتجدها هنا.',
                 textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 14, color: Colors.black54)),
+                style: TextStyle(fontSize: 14, height: 1.5, color: inkSoft)),
           ],
         ),
       );
@@ -889,21 +1379,21 @@ class PoemPage extends StatelessWidget {
                 if (v == 'pdf') showPoemPdfSheet(context, poem, diwan);
                 if (v == 'copy') _copy(context);
               },
-              itemBuilder: (_) => const [
+              itemBuilder: (_) => [
                 PopupMenuItem(
                   value: 'pdf',
                   child: Row(children: [
                     Icon(Icons.picture_as_pdf_rounded, color: brown),
-                    SizedBox(width: 10),
-                    Text('تحويل القصيدة إلى PDF'),
+                    const SizedBox(width: 10),
+                    const Text('تحويل القصيدة إلى PDF'),
                   ]),
                 ),
                 PopupMenuItem(
                   value: 'copy',
                   child: Row(children: [
                     Icon(Icons.copy_rounded, color: brown),
-                    SizedBox(width: 10),
-                    Text('نسخ القصيدة'),
+                    const SizedBox(width: 10),
+                    const Text('نسخ القصيدة'),
                   ]),
                 ),
               ],
@@ -915,62 +1405,284 @@ class PoemPage extends StatelessWidget {
           children: [
             PoemHeader(title: poem.title, diwan: diwan),
             const SizedBox(height: 16),
-            PoemFrame(child: PoemBody(poem: poem)),
-            const SizedBox(height: 18),
-            Center(
-              child: FilledButton.icon(
-                style: FilledButton.styleFrom(
-                  backgroundColor: brown,
-                  foregroundColor: Colors.white,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 26, vertical: 14),
-                ),
-                onPressed: () => _copy(context),
-                icon: const Icon(Icons.copy_rounded, size: 24),
-                label: const Text('نسخ القصيدة',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            PoemFrame(
+              child: Column(
+                children: [
+                  PoemBody(poem: poem),
+                  const _PoemFooter(),
+                ],
               ),
+            ),
+            const SizedBox(height: 20),
+            Row(
+              children: [
+                Expanded(
+                  child: FilledButton.icon(
+                    style: FilledButton.styleFrom(
+                      backgroundColor: brown,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16)),
+                    ),
+                    onPressed: () => _copy(context),
+                    icon: const Icon(Icons.copy_rounded, size: 22),
+                    label: const Text('نسخ القصيدة',
+                        style:
+                            TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: brown,
+                      side: BorderSide(color: brown, width: 1.4),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16)),
+                    ),
+                    onPressed: () => showPoemPdfSheet(context, poem, diwan),
+                    icon: const Icon(Icons.picture_as_pdf_rounded, size: 22),
+                    label: const Text('حفظ PDF',
+                        style:
+                            TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+                  ),
+                ),
+              ],
             ),
           ],
         ),
       );
 }
 
+/// تذييل القصيدة داخل الإطار (نفس تذييل ملف الـ PDF)
+class _PoemFooter extends StatelessWidget {
+  const _PoemFooter();
+  @override
+  Widget build(BuildContext context) {
+    // ألوان الورقة ثابتة الفاتحة لذلك نستخدم أحبارًا داكنة ثابتة النسبة
+    final p = currentPalette;
+    return Padding(
+      padding: const EdgeInsets.only(top: 6),
+      child: Column(
+        children: [
+          const OrnamentDivider(),
+          const SizedBox(height: 12),
+          Text('كلمات شاعر رسول الله ﷺ',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                  color: p.dark ? const Color(0xFF3E2723) : p.primary,
+                  fontSize: 15.5,
+                  fontWeight: FontWeight.bold)),
+          const SizedBox(height: 4),
+          Text('عبدالرحمن مصطفى الأزهري',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                  color: Color.lerp(p.accent, Colors.black, .35),
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600)),
+        ],
+      ),
+    );
+  }
+}
+
 // ───────────── الإعدادات ─────────────
 class SettingsPage extends StatelessWidget {
   const SettingsPage({super.key});
+
+  Widget _sub(IconData icon, String text) => Padding(
+        padding: const EdgeInsets.only(top: 4, bottom: 12),
+        child: Row(
+          children: [
+            Icon(icon, color: accentGold, size: 22),
+            const SizedBox(width: 8),
+            Text(text,
+                style: TextStyle(
+                    fontSize: 16.5, fontWeight: FontWeight.bold, color: ink)),
+          ],
+        ),
+      );
+
   @override
   Widget build(BuildContext context) => SafeArea(
         child: ListView(
           padding: const EdgeInsets.all(18),
           children: [
             const SectionHeading('الإعدادات'),
-            SizedBox(
-              height: 56,
-              child: FilledButton.icon(
-                style: FilledButton.styleFrom(
-                  backgroundColor: brown,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16)),
-                ),
-                onPressed: () => Navigator.push(
+
+            // ── ثيمات التطبيق ──
+            _sub(Icons.palette_rounded, 'مظهر التطبيق'),
+            ListenableBuilder(
+              listenable: appThemeIndex,
+              builder: (_, __) => LayoutBuilder(
+                builder: (_, c) {
+                  const gap = 10.0;
+                  final w = (c.maxWidth - gap * 2) / 3;
+                  return Wrap(
+                    spacing: gap,
+                    runSpacing: gap,
+                    children: [
+                      for (var i = 0; i < appPalettes.length; i++)
+                        SizedBox(
+                          width: w,
+                          child: _ThemeCard(
+                            p: appPalettes[i],
+                            selected: appThemeIndex.value == i,
+                            onTap: () => appThemeIndex.value = i,
+                          ),
+                        ),
+                    ],
+                  );
+                },
+              ),
+            ),
+
+            const SizedBox(height: 22),
+            _sub(Icons.text_fields_rounded, 'القراءة'),
+            Material(
+              color: brown,
+              borderRadius: BorderRadius.circular(18),
+              elevation: 2,
+              clipBehavior: Clip.antiAlias,
+              child: InkWell(
+                onTap: () => Navigator.push(
                     context,
                     MaterialPageRoute(
                         builder: (_) => const FontSettingsPage())),
-                icon: const Icon(Icons.text_fields_rounded, size: 28),
-                label: const Text('إعدادات الخط',
-                    style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 44,
+                        height: 44,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: accentGold.withOpacity(.2),
+                          border: Border.all(color: accentGold),
+                        ),
+                        child: Icon(Icons.text_fields_rounded,
+                            color: accentGold, size: 26),
+                      ),
+                      const SizedBox(width: 14),
+                      const Expanded(
+                        child: Text('إعدادات الخط',
+                            style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 17,
+                                fontWeight: FontWeight.bold)),
+                      ),
+                      Icon(Icons.chevron_left_rounded,
+                          color: accentGold, size: 28),
+                    ],
+                  ),
+                ),
               ),
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 18),
             const Divider(),
-            const ListTile(
-              leading: Icon(Icons.info_outline, color: brown),
-              title: Text('عن التطبيق'),
-              subtitle: Text('دواوين النور — دواوين شعرية'),
+            ListTile(
+              leading: Icon(Icons.info_outline_rounded, color: brown),
+              title: const Text('عن التطبيق'),
+              subtitle: const Text('دواوين النور — دواوين شعرية'),
             ),
           ],
+        ),
+      );
+}
+
+/// بطاقة معاينة ثيم
+class _ThemeCard extends StatelessWidget {
+  final AppPalette p;
+  final bool selected;
+  final VoidCallback onTap;
+  const _ThemeCard(
+      {required this.p, required this.selected, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 220),
+          padding: const EdgeInsets.all(6),
+          decoration: BoxDecoration(
+            color: p.card,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: selected ? p.accent : p.primary.withOpacity(.25),
+              width: selected ? 2.6 : 1,
+            ),
+            boxShadow: selected ? _softShadow(.18) : null,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(
+                height: 64,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(10),
+                  child: Stack(
+                    children: [
+                      Positioned.fill(child: ColoredBox(color: p.bg)),
+                      Positioned(
+                          left: 0,
+                          right: 0,
+                          top: 0,
+                          child: Container(height: 18, color: p.primary)),
+                      Positioned(
+                        left: 8,
+                        right: 8,
+                        top: 25,
+                        child: Container(
+                          height: 22,
+                          decoration: BoxDecoration(
+                            color: p.card,
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(color: p.accent, width: 1),
+                          ),
+                        ),
+                      ),
+                      Positioned(
+                        left: 14,
+                        right: 14,
+                        bottom: 6,
+                        child: Container(
+                            height: 4,
+                            decoration: BoxDecoration(
+                                color: p.accent,
+                                borderRadius: BorderRadius.circular(2))),
+                      ),
+                      if (selected)
+                        Positioned.fill(
+                          child: Center(
+                            child: Container(
+                              width: 26,
+                              height: 26,
+                              decoration: BoxDecoration(
+                                  shape: BoxShape.circle, color: p.accent),
+                              child: Icon(Icons.check_rounded,
+                                  size: 18, color: p.primaryDark),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(p.label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: selected ? FontWeight.bold : FontWeight.w500,
+                      color: p.ink)),
+            ],
+          ),
         ),
       );
 }
@@ -980,10 +1692,36 @@ class SectionHeading extends StatelessWidget {
   const SectionHeading(this.text, {super.key});
   @override
   Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.only(bottom: 12),
-        child: Text(text,
-            style: const TextStyle(
-                fontSize: 21, fontWeight: FontWeight.bold, color: brown)),
+        padding: const EdgeInsets.only(bottom: 14),
+        child: Row(
+          children: [
+            Container(
+              width: 5,
+              height: 26,
+              decoration: BoxDecoration(
+                color: accentGold,
+                borderRadius: BorderRadius.circular(3),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Text(text,
+                style: TextStyle(
+                    fontSize: 21, fontWeight: FontWeight.bold, color: brown)),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Container(
+                height: 1.2,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: AlignmentDirectional.centerStart,
+                    end: AlignmentDirectional.centerEnd,
+                    colors: [accentGold, accentGold.withOpacity(0)],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
       );
 }
 
@@ -1153,40 +1891,61 @@ void _drawMedallion(Canvas canvas, Offset c, double r) {
 
 class _StarPainter extends CustomPainter {
   final Color color;
-  const _StarPainter(this.color);
+  final Color? stroke;
+  const _StarPainter(this.color, [this.stroke]);
   @override
-  void paint(Canvas canvas, Size size) => canvas.drawPath(
-      _star8(size.center(Offset.zero), size.width / 2),
-      Paint()..color = color);
+  void paint(Canvas canvas, Size size) {
+    final path = _star8(size.center(Offset.zero), size.width / 2);
+    canvas.drawPath(path, Paint()..color = color);
+    if (stroke != null) {
+      canvas.drawPath(
+          path,
+          Paint()
+            ..color = stroke!
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 1.4);
+    }
+  }
+
   @override
-  bool shouldRepaint(covariant _StarPainter old) => old.color != color;
+  bool shouldRepaint(covariant _StarPainter old) =>
+      old.color != color || old.stroke != stroke;
 }
 
-/// فاصل مزخرف بين الأبيات: خط - نجمة - خط
+/// فاصل مزخرف بين الأبيات: خط - معيّن - نجمة - معيّن - خط
 class OrnamentDivider extends StatelessWidget {
   const OrnamentDivider({super.key});
   @override
   Widget build(BuildContext context) {
-    Widget line(bool fadeLeft) => Expanded(
+    Widget line(bool strongAtEnd) => Expanded(
           child: Container(
             height: 1.2,
             decoration: BoxDecoration(
               gradient: LinearGradient(
-                begin: fadeLeft ? Alignment.centerRight : Alignment.centerLeft,
-                end: fadeLeft ? Alignment.centerLeft : Alignment.centerRight,
-                colors: [accentGold, accentGold.withOpacity(0)],
+                begin: AlignmentDirectional.centerStart,
+                end: AlignmentDirectional.centerEnd,
+                colors: strongAtEnd
+                    ? [accentGold.withOpacity(0), accentGold]
+                    : [accentGold, accentGold.withOpacity(0)],
               ),
             ),
           ),
         );
+    Widget diamond() => Transform.rotate(
+          angle: math.pi / 4,
+          child: Container(width: 5, height: 5, color: accentGold),
+        );
     return Row(
       children: [
-        line(false),
-        const SizedBox(width: 8),
-        CustomPaint(
-            size: const Size(16, 16), painter: _StarPainter(accentGold)),
-        const SizedBox(width: 8),
         line(true),
+        const SizedBox(width: 8),
+        diamond(),
+        const SizedBox(width: 7),
+        CustomPaint(size: const Size(16, 16), painter: _StarPainter(accentGold)),
+        const SizedBox(width: 7),
+        diamond(),
+        const SizedBox(width: 8),
+        line(false),
       ],
     );
   }
@@ -1194,14 +1953,17 @@ class OrnamentDivider extends StatelessWidget {
 
 /// خلفية مزخرفة خفيفة (نجوم هندسية متكررة)
 class _PatternPainter extends CustomPainter {
+  final double k; // معامل شدّة النقش
+  const _PatternPainter({this.k = 1.0});
   @override
   void paint(Canvas canvas, Size size) {
     const cell = 46.0;
     final stroke = Paint()
-      ..color = accentGold.withOpacity(.16)
+      ..color = accentGold.withOpacity((.16 * k).clamp(0.0, 1.0))
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1;
-    final fill = Paint()..color = accentGold.withOpacity(.10);
+    final fill = Paint()
+      ..color = accentGold.withOpacity((.10 * k).clamp(0.0, 1.0));
     for (var y = 0.0; y < size.height + cell; y += cell) {
       for (var x = 0.0; x < size.width + cell; x += cell) {
         canvas.drawPath(_star8(Offset(x, y), 13), stroke);
@@ -1211,43 +1973,53 @@ class _PatternPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter old) => false;
+  bool shouldRepaint(covariant _PatternPainter old) => true;
 }
 
-/// الإطار: خطان مذهّبان ونجوم في الزوايا ومنتصف الضلعين
+/// الإطار: خطوط مذهّبة مزدوجة + أقواس زخرفية في الزوايا + نجوم
 class _FramePainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
-    final outer = Paint()
-      ..color = accentGold
+    Paint line(Color c, double w) => Paint()
+      ..color = c
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.2;
-    final inner = Paint()
-      ..color = brown.withOpacity(.65)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.2;
+      ..strokeWidth = w;
+
     canvas.drawRRect(
         RRect.fromRectAndRadius(
             Rect.fromLTWH(1.5, 1.5, size.width - 3, size.height - 3),
             const Radius.circular(12)),
-        outer);
-    final r = Rect.fromLTWH(9, 9, size.width - 18, size.height - 18);
+        line(accentGold, 2.4));
     canvas.drawRRect(
-        RRect.fromRectAndRadius(r, const Radius.circular(6)), inner);
-    for (final c in [
-      r.topLeft,
-      r.topRight,
-      r.bottomLeft,
-      r.bottomRight,
-    ]) {
+        RRect.fromRectAndRadius(
+            Rect.fromLTWH(5.5, 5.5, size.width - 11, size.height - 11),
+            const Radius.circular(9)),
+        line(accentGold.withOpacity(.5), .8));
+    final r = Rect.fromLTWH(10, 10, size.width - 20, size.height - 20);
+    canvas.drawRRect(RRect.fromRectAndRadius(r, const Radius.circular(5)),
+        line(brown.withOpacity(.65), 1.2));
+
+    // أقواس زخرفية داخل الزوايا
+    final corners = [r.topLeft, r.topRight, r.bottomRight, r.bottomLeft];
+    final starts = [0.0, math.pi / 2, math.pi, 3 * math.pi / 2];
+    for (var i = 0; i < 4; i++) {
+      canvas.drawArc(Rect.fromCircle(center: corners[i], radius: 30),
+          starts[i], math.pi / 2, false, line(accentGold.withOpacity(.85), 1.4));
+      canvas.drawArc(Rect.fromCircle(center: corners[i], radius: 23),
+          starts[i], math.pi / 2, false, line(brown.withOpacity(.6), 1));
+    }
+
+    for (final c in corners) {
       _drawMedallion(canvas, c, 14);
     }
     _drawMedallion(canvas, Offset(r.center.dx, r.top), 9);
     _drawMedallion(canvas, Offset(r.center.dx, r.bottom), 9);
+    _drawMedallion(canvas, Offset(r.left, r.center.dy), 7);
+    _drawMedallion(canvas, Offset(r.right, r.center.dy), 7);
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter old) => false;
+  bool shouldRepaint(covariant CustomPainter old) => true;
 }
 
 /// إطار القصيدة
@@ -1257,13 +2029,13 @@ class PoemFrame extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Container(
         decoration: BoxDecoration(
-          color: const Color(0xFFFFFBF2),
+          color: paperColor,
           borderRadius: BorderRadius.circular(12),
           boxShadow: [
             BoxShadow(
-                color: Colors.black.withOpacity(.15),
-                blurRadius: 10,
-                offset: const Offset(0, 4)),
+                color: Colors.black.withOpacity(.22),
+                blurRadius: 16,
+                offset: const Offset(0, 6)),
           ],
         ),
         child: ClipRRect(
@@ -1275,7 +2047,7 @@ class PoemFrame extends StatelessWidget {
                       child: CustomPaint(painter: _PatternPainter()))),
               Positioned.fill(child: CustomPaint(painter: _FramePainter())),
               Padding(
-                padding: const EdgeInsets.fromLTRB(26, 36, 26, 30),
+                padding: const EdgeInsets.fromLTRB(28, 40, 28, 32),
                 child: child,
               ),
             ],
@@ -1290,53 +2062,91 @@ class PoemHeader extends StatelessWidget {
   final String diwan;
   const PoemHeader({super.key, required this.title, required this.diwan});
   @override
-  Widget build(BuildContext context) => Container(
-        width: double.infinity,
-        padding: const EdgeInsets.fromLTRB(20, 30, 20, 20),
-        decoration: BoxDecoration(
-          gradient: const LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [brown, brownDark]),
-          borderRadius: const BorderRadius.only(
-            topLeft: Radius.circular(110),
-            topRight: Radius.circular(110),
-            bottomLeft: Radius.circular(16),
-            bottomRight: Radius.circular(16),
-          ),
-          border: Border.all(color: accentGold, width: 2),
-          boxShadow: [
-            BoxShadow(
-                color: Colors.black.withOpacity(.25),
-                blurRadius: 10,
-                offset: const Offset(0, 4)),
-          ],
-        ),
-        child: Column(
+  Widget build(BuildContext context) {
+    const archRadius = BorderRadius.only(
+      topLeft: Radius.circular(110),
+      topRight: Radius.circular(110),
+      bottomLeft: Radius.circular(18),
+      bottomRight: Radius.circular(18),
+    );
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [brown, brownDark]),
+        borderRadius: archRadius,
+        border: Border.all(color: accentGold, width: 2),
+        boxShadow: _softShadow(.28),
+      ),
+      child: ClipRRect(
+        borderRadius: archRadius,
+        child: Stack(
           children: [
-            CustomPaint(
-                size: const Size(22, 22), painter: _StarPainter(accentGold)),
-            const SizedBox(height: 10),
-            Text(title,
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 22,
-                    height: 1.5,
-                    fontWeight: FontWeight.bold)),
-            const SizedBox(height: 10),
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 30),
-              child: OrnamentDivider(),
+            Positioned.fill(
+                child: RepaintBoundary(
+                    child: CustomPaint(painter: _PatternPainter(k: .8)))),
+            // قوس داخلي رفيع
+            Positioned.fill(
+              child: Padding(
+                padding: const EdgeInsets.all(6),
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    borderRadius: const BorderRadius.only(
+                      topLeft: Radius.circular(104),
+                      topRight: Radius.circular(104),
+                      bottomLeft: Radius.circular(12),
+                      bottomRight: Radius.circular(12),
+                    ),
+                    border:
+                        Border.all(color: accentGold.withOpacity(.5), width: .9),
+                  ),
+                ),
+              ),
             ),
-            const SizedBox(height: 10),
-            Text(diwan,
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                    color: Color(0xFFE8D9BC), fontSize: 14, height: 1.4)),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(22, 30, 22, 22),
+              child: Column(
+                children: [
+                  CustomPaint(
+                      size: const Size(24, 24),
+                      painter: _StarPainter(accentGold)),
+                  const SizedBox(height: 10),
+                  Text(title,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 22,
+                          height: 1.5,
+                          fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 10),
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 30),
+                    child: OrnamentDivider(),
+                  ),
+                  const SizedBox(height: 12),
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(.2),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: accentGold.withOpacity(.5)),
+                    ),
+                    child: Text(diwan,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                            color: Color(0xFFE8D9BC), fontSize: 13.5, height: 1.4)),
+                  ),
+                ],
+              ),
+            ),
           ],
         ),
-      );
+      ),
+    );
+  }
 }
 
 // ════════════════════════════════════════════════
@@ -1354,7 +2164,7 @@ class FontSettingsPage extends StatelessWidget {
   Widget _title(String t) => Padding(
         padding: const EdgeInsets.only(top: 22, bottom: 10),
         child: Text(t,
-            style: const TextStyle(
+            style: TextStyle(
                 fontSize: 17, fontWeight: FontWeight.bold, color: brown)),
       );
 
@@ -1364,7 +2174,7 @@ class FontSettingsPage extends StatelessWidget {
           required Widget trailing,
           required VoidCallback onTap}) =>
       Material(
-        color: const Color(0xFFFFFBF2),
+        color: cream,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(14),
           side: BorderSide(color: accentGold.withOpacity(.6)),
@@ -1395,14 +2205,14 @@ class FontSettingsPage extends StatelessWidget {
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: const Color(0xFFFFFBF2),
+      backgroundColor: cream,
       builder: (ctx) => SafeArea(
         child: SizedBox(
           height: MediaQuery.of(ctx).size.height * .8,
           child: Column(
             children: [
-              const Padding(
-                padding: EdgeInsets.all(16),
+              Padding(
+                padding: const EdgeInsets.all(16),
                 child: Text('نوع الخط',
                     style: TextStyle(
                         fontSize: 18,
@@ -1420,7 +2230,7 @@ class FontSettingsPage extends StatelessWidget {
                       title: Text(c.label,
                           style: TextStyle(
                               fontSize: 12,
-                              color: sel ? brown : Colors.black54,
+                              color: sel ? brown : inkSoft,
                               fontWeight:
                                   sel ? FontWeight.bold : FontWeight.normal)),
                       subtitle: Text('بسم الله الرحمن الرحيم',
@@ -1430,10 +2240,10 @@ class FontSettingsPage extends StatelessWidget {
                               TextStyle(
                                   fontSize: 22,
                                   height: 1.6,
-                                  color: brownDark,
+                                  color: ink,
                                   fontWeight: poemFontWeight))),
                       trailing: sel
-                          ? const Icon(Icons.check_circle, color: brown)
+                          ? Icon(Icons.check_circle, color: brown)
                           : null,
                       onTap: () {
                         poemFontFamilyIndex.value = i;
@@ -1453,7 +2263,7 @@ class FontSettingsPage extends StatelessWidget {
   Future<void> _pickColor(BuildContext context) async {
     await showModalBottomSheet<void>(
       context: context,
-      backgroundColor: const Color(0xFFFFFBF2),
+      backgroundColor: cream,
       builder: (ctx) => SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(20),
@@ -1523,7 +2333,7 @@ class FontSettingsPage extends StatelessWidget {
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 16),
                       child: Text(arDigits(v.round()),
-                          style: const TextStyle(
+                          style: TextStyle(
                               fontSize: 22,
                               fontWeight: FontWeight.bold,
                               color: brown)),
@@ -1555,7 +2365,7 @@ class FontSettingsPage extends StatelessWidget {
                 title: 'اختيار نوع الخط',
                 trailing: Text(
                     fontChoices[poemFontFamilyIndex.value].label,
-                    style: const TextStyle(fontSize: 13, color: brown)),
+                    style: TextStyle(fontSize: 13, color: brown)),
                 onTap: () => _pickFont(context),
               ),
             ),
@@ -1597,7 +2407,7 @@ class FontSettingsPage extends StatelessWidget {
                             : OutlinedButton(
                                 style: OutlinedButton.styleFrom(
                                     foregroundColor: brown,
-                                    side: const BorderSide(color: brown),
+                                    side: BorderSide(color: brown),
                                     padding: const EdgeInsets.symmetric(
                                         vertical: 14)),
                                 onPressed: () =>
@@ -1623,7 +2433,7 @@ class FontSettingsPage extends StatelessWidget {
                     padding: const EdgeInsets.symmetric(vertical: 14));
                 ButtonStyle outlined() => OutlinedButton.styleFrom(
                     foregroundColor: brown,
-                    side: const BorderSide(color: brown),
+                    side: BorderSide(color: brown),
                     padding: const EdgeInsets.symmetric(vertical: 14));
                 return Row(
                   children: [

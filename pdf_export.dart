@@ -978,7 +978,7 @@ Future<void> showPoemPdfSheet(
   Widget title(String t) => Padding(
         padding: const EdgeInsets.only(top: 14, bottom: 8),
         child: Text(t,
-            style: const TextStyle(
+            style: TextStyle(
                 fontSize: 15, fontWeight: FontWeight.bold, color: brown)),
       );
 
@@ -1026,7 +1026,7 @@ Future<void> showPoemPdfSheet(
                   padding: const EdgeInsets.fromLTRB(20, 14, 12, 0),
                   child: Row(
                     children: [
-                      const Expanded(
+                      Expanded(
                         child: Text('تحويل القصيدة إلى PDF',
                             style: TextStyle(
                                 fontSize: 19,
@@ -1035,8 +1035,8 @@ Future<void> showPoemPdfSheet(
                       ),
                       TextButton.icon(
                         onPressed: shuffle,
-                        icon: const Icon(Icons.shuffle_rounded, color: brown),
-                        label: const Text('تصميم عشوائي',
+                        icon: Icon(Icons.shuffle_rounded, color: brown),
+                        label: Text('تصميم عشوائي',
                             style: TextStyle(color: brown)),
                       ),
                     ],
