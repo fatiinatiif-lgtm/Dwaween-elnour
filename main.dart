@@ -485,6 +485,9 @@ class _MainShellState extends State<MainShell> {
       );
 }
 
+// ───────────── الشريط السفلي: "محراب النور" ─────────────
+// الشريط يطلع منه قوس محراب مدبّب تحت التبويب المختار، وفوقه نجمة ذهبية مضيئة
+// تنزلق وتدور من تبويب لآخر، وبقية التبويبات أيقونة + عنوان على الشريط.
 class _FancyBottomBar extends StatelessWidget {
   final int selected;
   final ValueChanged<int> onTap;
@@ -497,71 +500,216 @@ class _FancyBottomBar extends StatelessWidget {
     (Icons.settings_rounded, 'الإعدادات'),
   ];
 
+  static const double _h = 96; // الارتفاع الكلي
+  static const double _y0 = 30; // أعلى حافة للشريط (فوقها مكان القوس والنجمة)
+  static const double _badge = 54; // قطر النجمة
+
   @override
-  Widget build(BuildContext context) => Container(
-        color: beige,
-        child: SafeArea(
-          top: false,
-          child: Container(
-            margin: const EdgeInsets.fromLTRB(14, 6, 14, 10),
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [brown, brownDark]),
-              borderRadius: BorderRadius.circular(30),
-              border: Border.all(color: accentGold.withOpacity(.7), width: 1.2),
-              boxShadow: [
-                BoxShadow(
-                    color: Colors.black.withOpacity(.3),
-                    blurRadius: 14,
-                    offset: const Offset(0, 5)),
-              ],
-            ),
-            child: Row(
-              children: [
-                for (var i = 0; i < _items.length; i++)
-                  Expanded(
-                    child: GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      onTap: () => onTap(i),
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 250),
-                        curve: Curves.easeOutCubic,
-                        padding: const EdgeInsets.symmetric(vertical: 8),
-                        decoration: BoxDecoration(
-                          color: selected == i ? accentGold : Colors.transparent,
-                          borderRadius: BorderRadius.circular(22),
-                        ),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(_items[i].$1,
-                                size: 30,
-                                color: selected == i
-                                    ? brownDark
-                                    : Colors.white.withOpacity(.82)),
-                            const SizedBox(height: 2),
-                            Text(_items[i].$2,
-                                style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: selected == i
-                                        ? FontWeight.bold
-                                        : FontWeight.w500,
-                                    color: selected == i
-                                        ? brownDark
-                                        : Colors.white.withOpacity(.82))),
-                          ],
+  Widget build(BuildContext context) {
+    final rtl = Directionality.of(context) == TextDirection.rtl;
+    return Container(
+      color: beige,
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 2, 12, 8),
+          child: SizedBox(
+            height: _h,
+            child: LayoutBuilder(builder: (ctx, c) {
+              final w = c.maxWidth;
+              final iw = w / _items.length;
+              // مركز التبويب (يدعم اتجاه RTL: أول تبويب على اليمين)
+              double cxOf(double t) => rtl ? w - (t + .5) * iw : (t + .5) * iw;
+              return TweenAnimationBuilder<double>(
+                tween: Tween<double>(end: selected.toDouble()),
+                duration: const Duration(milliseconds: 480),
+                curve: Curves.easeOutCubic,
+                builder: (_, t, __) {
+                  final cx = cxOf(t);
+                  final nearest = t.round().clamp(0, _items.length - 1);
+                  return Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      Positioned.fill(
+                        child: CustomPaint(
+                          painter: _BarPainter(
+                              cx: cx,
+                              y0: _y0,
+                              top: brown,
+                              bottom: brownDark,
+                              gold: accentGold),
                         ),
                       ),
-                    ),
-                  ),
-              ],
-            ),
+                      // التبويبات
+                      for (var i = 0; i < _items.length; i++)
+                        Positioned(
+                          left: rtl ? w - (i + 1) * iw : i * iw,
+                          width: iw,
+                          top: 0,
+                          bottom: 0,
+                          child: _item(i, (1 - (t - i).abs()).clamp(0.0, 1.0)),
+                        ),
+                      // النجمة المضيئة
+                      Positioned(
+                        left: cx - _badge / 2,
+                        top: _y0 - _badge / 2,
+                        width: _badge,
+                        height: _badge,
+                        child: IgnorePointer(
+                          child: Stack(
+                            alignment: Alignment.center,
+                            children: [
+                              Container(
+                                width: _badge * .7,
+                                height: _badge * .7,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  boxShadow: [
+                                    BoxShadow(
+                                        color: accentGold.withOpacity(.55),
+                                        blurRadius: 18,
+                                        spreadRadius: 1),
+                                  ],
+                                ),
+                              ),
+                              Transform.rotate(
+                                angle: t * math.pi / 2,
+                                child: CustomPaint(
+                                    size: const Size(_badge, _badge),
+                                    painter:
+                                        _BadgePainter(accentGold, brownDark)),
+                              ),
+                              Icon(_items[nearest].$1,
+                                  size: 23, color: accentGold),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              );
+            }),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _item(int i, double w) => GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => onTap(i),
+        child: Stack(
+          children: [
+            // الأيقونة تختفي تدريجيًا لأن النجمة تحلّ محلها
+            Positioned(
+              top: _y0 + 9,
+              left: 0,
+              right: 0,
+              child: Opacity(
+                opacity: (1 - w * 1.6).clamp(0.0, 1.0),
+                child: Icon(_items[i].$1,
+                    size: 27, color: Colors.white.withOpacity(.85)),
+              ),
+            ),
+            Positioned(
+              bottom: 10,
+              left: 0,
+              right: 0,
+              child: Text(
+                _items[i].$2,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 12 + w * 1.0,
+                  fontWeight: w > .5 ? FontWeight.bold : FontWeight.w500,
+                  color: Color.lerp(
+                      Colors.white.withOpacity(.82), accentGold, w),
+                ),
+              ),
+            ),
+          ],
+        ),
       );
+}
+
+/// جسم الشريط: مستطيل مدوّر + قوس محراب مدبّب فوق التبويب المختار،
+/// بتدرّج ونقش هندسي وهالة ذهبية وإطار مذهّب
+class _BarPainter extends CustomPainter {
+  final double cx;
+  final double y0;
+  final Color top;
+  final Color bottom;
+  final Color gold;
+  const _BarPainter({
+    required this.cx,
+    required this.y0,
+    required this.top,
+    required this.bottom,
+    required this.gold,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final w = size.width, h = size.height;
+    const hw = 35.0; // نصف عرض قاعدة القوس
+    final body = Path()
+      ..addRRect(RRect.fromRectAndRadius(
+          Rect.fromLTRB(0, y0, w, h), const Radius.circular(24)));
+    // قوس المحراب المدبّب
+    final arch = Path()
+      ..moveTo(cx - hw, y0 + 12)
+      ..cubicTo(cx - hw, y0 - 16, cx - 11, y0 - 19, cx, 3)
+      ..cubicTo(cx + 11, y0 - 19, cx + hw, y0 - 16, cx + hw, y0 + 12)
+      ..close();
+    final shape = Path.combine(PathOperation.union, body, arch);
+
+    canvas.drawShadow(shape, Colors.black.withOpacity(.55), 9, true);
+    final rect = Offset.zero & size;
+    canvas.drawPath(
+        shape,
+        Paint()
+          ..shader = LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [top, bottom],
+          ).createShader(rect));
+
+    canvas.save();
+    canvas.clipPath(shape);
+    // هالة ذهبية خلف النجمة
+    canvas.drawCircle(
+        Offset(cx, y0),
+        62,
+        Paint()
+          ..shader = RadialGradient(colors: [
+            gold.withOpacity(.38),
+            gold.withOpacity(0),
+          ]).createShader(Rect.fromCircle(center: Offset(cx, y0), radius: 62)));
+    // نقش النجوم الهندسي
+    const _PatternPainter(k: 1.1).paint(canvas, size);
+    // خط ذهبي داخلي رفيع أسفل الشريط
+    canvas.drawLine(
+        Offset(22, h - 7),
+        Offset(w - 22, h - 7),
+        Paint()
+          ..color = gold.withOpacity(.35)
+          ..strokeWidth = .8);
+    canvas.restore();
+
+    canvas.drawPath(
+        shape,
+        Paint()
+          ..color = gold.withOpacity(.9)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.5);
+  }
+
+  @override
+  bool shouldRepaint(covariant _BarPainter old) =>
+      old.cx != cx ||
+      old.top != top ||
+      old.bottom != bottom ||
+      old.gold != gold;
 }
 
 // ───────────── الشاشة الرئيسية ─────────────
@@ -815,6 +963,14 @@ class _VerseOfDayCard extends StatelessWidget {
     final d = DateTime.now();
     final day = DateTime(d.year, d.month, d.day).difference(DateTime(2020)).inDays;
     final pick = all[(day * 7919) % all.length];
+    // البيت التالي في نفس القصيدة (لو كان آخر بيت نأخذ السابق له ليكونا بيتين)
+    final vs = pick.poem.verses;
+    final at = vs.indexOf(pick.verse);
+    final Verse? nextV = vs.length < 2
+        ? null
+        : (at >= 0 && at + 1 < vs.length ? vs[at + 1] : vs[vs.length - 2]);
+    final Verse firstV = (nextV != null && at + 1 >= vs.length) ? nextV : pick.verse;
+    final Verse? secondV = (nextV != null && at + 1 >= vs.length) ? pick.verse : nextV;
     final style = withPoemFont(const TextStyle(
             color: Colors.white, fontSize: 20, height: 1.7))
         .copyWith(fontWeight: poemFontWeight);
@@ -892,7 +1048,8 @@ class _VerseOfDayCard extends StatelessWidget {
                     children: [
                       _action(Icons.image_rounded, 'حفظ كصورة', () {
                         showVerseImageSheet(
-                            context, pick.diwan, pick.poem, pick.verse);
+                            context, pick.diwan, pick.poem, firstV,
+                            nextVerse: secondV);
                       }),
                       _action(Icons.copy_rounded, 'نسخ', () async {
                         await copyVerseText(
@@ -1158,7 +1315,9 @@ class DiwansPage extends StatelessWidget {
       );
 }
 
-/// بطاقة الديوان: تدرّج + إطار مذهّب داخلي + نجمة ترقيم + نقش خفيف
+/// بطاقة الديوان (تصميم "غلاف الكتاب"):
+/// كعب ملوّن على اليمين عليه محراب مذهّب يحمل الرقم،
+/// وجسم فاتح فيه العنوان كاملًا + فاصل زخرفي + عدد القصائد وسهم الدخول.
 class DiwanTile extends StatelessWidget {
   final String name;
   final int number;
@@ -1168,123 +1327,245 @@ class DiwanTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final count = (poems[name] ?? []).length;
     return Padding(
-      padding: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.only(bottom: 16),
       child: Container(
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(24),
-          gradient: LinearGradient(
-              begin: Alignment.topRight,
-              end: Alignment.bottomLeft,
-              colors: [brown, brownDark]),
-          boxShadow: _softShadow(.25),
+          color: cream,
+          borderRadius: BorderRadius.circular(26),
+          border: Border.all(color: accentGold.withOpacity(.6), width: 1.2),
+          boxShadow: _softShadow(.16),
         ),
         child: ClipRRect(
-          borderRadius: BorderRadius.circular(24),
-          child: Stack(
-            children: [
-              Positioned.fill(
-                  child: RepaintBoundary(
-                      child: CustomPaint(painter: _PatternPainter(k: .9)))),
-              // نجمة كبيرة باهتة في الزاوية
-              PositionedDirectional(
-                end: -34,
-                bottom: -40,
-                child: CustomPaint(
-                    size: const Size(150, 150),
-                    painter: _StarPainter(accentGold.withOpacity(.13))),
-              ),
-              // إطار مذهّب داخلي
-              Positioned.fill(
-                child: Padding(
-                  padding: const EdgeInsets.all(5),
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(19),
-                      border:
-                          Border.all(color: accentGold.withOpacity(.65), width: 1),
-                    ),
-                  ),
-                ),
-              ),
-              Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                          builder: (_) => DiwanDetailPage(name: name))),
-                  child: Padding(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 18, vertical: 18),
-                    child: Row(
-                      children: [
-                        _NumberStar(
-                            number: number,
-                            size: 64,
-                            ring: accentGold,
-                            core: brownDark,
-                            textColor: accentGold),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(name,
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 17.5,
-                                      height: 1.45,
-                                      fontWeight: FontWeight.bold)),
-                              const SizedBox(height: 8),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 10, vertical: 3),
+          borderRadius: BorderRadius.circular(25),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (_) => DiwanDetailPage(name: name))),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: 128),
+                child: IntrinsicHeight(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // ── كعب الكتاب ──
+                      SizedBox(
+                        width: 88,
+                        child: Stack(
+                          alignment: Alignment.center,
+                          children: [
+                            Positioned.fill(
+                              child: DecoratedBox(
                                 decoration: BoxDecoration(
-                                  color: Colors.black.withOpacity(.22),
-                                  borderRadius: BorderRadius.circular(20),
-                                  border: Border.all(
-                                      color: accentGold.withOpacity(.5)),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(Icons.auto_stories_rounded,
-                                        size: 14, color: accentGold),
-                                    const SizedBox(width: 6),
-                                    Text('${arDigits(count)} قصيدة',
-                                        style: const TextStyle(
-                                            color: Color(0xFFE8D9BC),
-                                            fontSize: 12.5)),
-                                  ],
+                                  gradient: LinearGradient(
+                                    begin: Alignment.topCenter,
+                                    end: Alignment.bottomCenter,
+                                    colors: [brown, brownDark],
+                                  ),
                                 ),
                               ),
+                            ),
+                            Positioned.fill(
+                                child: RepaintBoundary(
+                                    child: CustomPaint(
+                                        painter: _PatternPainter(k: 1.2)))),
+                            _ArchBadge(number: number),
+                          ],
+                        ),
+                      ),
+                      // شريط ذهبي رفيع يفصل الكعب عن الجسم
+                      Container(
+                        width: 4,
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [
+                              Color.lerp(accentGold, Colors.white, .4)!,
+                              accentGold,
+                              Color.lerp(accentGold, Colors.black, .3)!,
                             ],
                           ),
                         ),
-                        const SizedBox(width: 8),
-                        Container(
-                          width: 36,
-                          height: 36,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            border: Border.all(color: accentGold, width: 1.2),
-                          ),
-                          child: Icon(Icons.chevron_left_rounded,
-                              color: accentGold, size: 26),
+                      ),
+                      // ── الجسم ──
+                      Expanded(
+                        child: Stack(
+                          children: [
+                            PositionedDirectional(
+                              end: -26,
+                              bottom: -30,
+                              child: CustomPaint(
+                                  size: const Size(120, 120),
+                                  painter:
+                                      _StarPainter(accentGold.withOpacity(.10))),
+                            ),
+                            Padding(
+                              padding:
+                                  const EdgeInsets.fromLTRB(14, 16, 14, 14),
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(name,
+                                      style: TextStyle(
+                                          color: ink,
+                                          fontSize: 17.5,
+                                          height: 1.55,
+                                          fontWeight: FontWeight.bold)),
+                                  const SizedBox(height: 10),
+                                  const OrnamentDivider(),
+                                  const SizedBox(height: 12),
+                                  Row(
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 11, vertical: 5),
+                                        decoration: BoxDecoration(
+                                          color: accentGold.withOpacity(.16),
+                                          borderRadius:
+                                              BorderRadius.circular(20),
+                                          border: Border.all(
+                                              color:
+                                                  accentGold.withOpacity(.6)),
+                                        ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(Icons.auto_stories_rounded,
+                                                size: 15, color: accentGold),
+                                            const SizedBox(width: 6),
+                                            Text('${arDigits(count)} قصيدة',
+                                                style: TextStyle(
+                                                    color: ink,
+                                                    fontSize: 12.5,
+                                                    fontWeight:
+                                                        FontWeight.w600)),
+                                          ],
+                                        ),
+                                      ),
+                                      const Spacer(),
+                                      Container(
+                                        width: 36,
+                                        height: 36,
+                                        decoration: BoxDecoration(
+                                          shape: BoxShape.circle,
+                                          gradient: LinearGradient(
+                                              begin: Alignment.topRight,
+                                              end: Alignment.bottomLeft,
+                                              colors: [brown, brownDark]),
+                                          border: Border.all(
+                                              color: accentGold, width: 1.3),
+                                        ),
+                                        child: Icon(
+                                            Icons.chevron_left_rounded,
+                                            color: accentGold,
+                                            size: 24),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
                 ),
               ),
-            ],
+            ),
           ),
         ),
       ),
     );
   }
+}
+
+/// محراب مذهّب يحمل رقم الديوان
+class _ArchBadge extends StatelessWidget {
+  final int number;
+  const _ArchBadge({required this.number});
+  @override
+  Widget build(BuildContext context) => SizedBox(
+        width: 56,
+        height: 70,
+        child: Stack(
+          alignment: const Alignment(0, .28),
+          children: [
+            CustomPaint(
+                size: const Size(56, 70),
+                painter: _ArchBadgePainter(accentGold, brownDark)),
+            SizedBox(
+              width: 34,
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(arDigits(number),
+                    style: TextStyle(
+                        color: accentGold,
+                        fontSize: 26,
+                        height: 1.1,
+                        fontWeight: FontWeight.bold)),
+              ),
+            ),
+          ],
+        ),
+      );
+}
+
+class _ArchBadgePainter extends CustomPainter {
+  final Color gold;
+  final Color core;
+  const _ArchBadgePainter(this.gold, this.core);
+
+  Path _arch(Rect r) {
+    final rad = r.width / 2;
+    return Path()
+      ..moveTo(r.left, r.bottom)
+      ..lineTo(r.left, r.top + rad)
+      ..arcTo(Rect.fromLTWH(r.left, r.top, r.width, r.width), math.pi, math.pi,
+          false)
+      ..lineTo(r.right, r.bottom)
+      ..close();
+  }
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final outer = Offset.zero & size;
+    final outerPath = _arch(outer);
+    canvas.drawPath(
+        outerPath,
+        Paint()
+          ..shader = LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Color.lerp(gold, Colors.white, .5)!,
+              gold,
+              Color.lerp(gold, Colors.black, .3)!,
+            ],
+          ).createShader(outer));
+    final inner = _arch(outer.deflate(4.5));
+    canvas.drawPath(inner, Paint()..color = core);
+    canvas.drawPath(
+        inner,
+        Paint()
+          ..color = Color.lerp(gold, Colors.white, .3)!
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.2);
+    canvas.drawPath(
+        _arch(outer.deflate(8)),
+        Paint()
+          ..color = gold.withOpacity(.4)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = .7);
+  }
+
+  @override
+  bool shouldRepaint(covariant _ArchBadgePainter old) =>
+      old.gold != gold || old.core != core;
 }
 
 /// شارة الترقيم: نجمة ثمانية (مربعان متداخلان) ذهبية متدرّجة
@@ -3469,3 +3750,4 @@ String arDigits(Object value) {
     return i == null ? c : d[i];
   }).join();
 }
+

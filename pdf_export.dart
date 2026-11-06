@@ -1254,6 +1254,8 @@ Future<Uint8List> buildVerseImage({
   required String title,
   required String sadr,
   required String ajz,
+  String? sadr2, // بيت ثانٍ اختياري (يظهر تحت الأول)
+  String? ajz2,
   required PdfTheme theme,
   required Color textColor,
   required Color paper,
@@ -1273,11 +1275,14 @@ Future<Uint8List> buildVerseImage({
   double indentOf(TextStyle st) =>
       measureText('ا        ا', st) - measureText('اا', st);
 
-  final texts = [displayText(sadr), displayText(ajz)]
-      .map((t) => t.trim().replaceAll(RegExp(r'\s+'), ' '))
-      .toList();
+  final hasSecond = sadr2 != null && ajz2 != null;
+  final texts = [
+    displayText(sadr),
+    displayText(ajz),
+    if (hasSecond) ...[displayText(sadr2!), displayText(ajz2!)],
+  ].map((t) => t.trim().replaceAll(RegExp(r'\s+'), ' ')).toList();
 
-  var size = 26.0;
+  var size = hasSecond ? 24.0 : 26.0;
   var st = styleFor(size);
   var w = _avail - indentOf(st);
   for (var i = 0; i < 6; i++) {
@@ -1310,6 +1315,10 @@ Future<Uint8List> buildVerseImage({
 
   final sp = hemistich(justifyHemistich(texts[0], style, hw));
   final aj = hemistich(justifyHemistich(texts[1], style, hw));
+  final sp2 =
+      hasSecond ? hemistich(justifyHemistich(texts[2], style, hw)) : null;
+  final aj2 =
+      hasSecond ? hemistich(justifyHemistich(texts[3], style, hw)) : null;
   final titleP = centered(
       title,
       baseStyle.merge(TextStyle(
@@ -1332,8 +1341,11 @@ Future<Uint8List> buildVerseImage({
       _avail);
 
   final gapV = size * .45;
+  const betweenVerses = 14.0 + 16 + 14; // فاصل زخرفي بين البيتين
+  final secondH =
+      hasSecond ? betweenVerses + sp2!.height + gapV + aj2!.height : 0.0;
   final contentH = 24 + 12 + titleP.height + 12 + 16 + 28 + sp.height + gapV +
-      aj.height + 28 + 16 + 12 + f1.height + 4 + f2.height;
+      aj.height + secondH + 28 + 16 + 12 + f1.height + 4 + f2.height;
   var y = math.max(70.0, (_pageH - contentH) / 2);
 
   final rec = ui.PictureRecorder();
@@ -1351,7 +1363,17 @@ Future<Uint8List> buildVerseImage({
   sp.paint(canvas, Offset(_mx + _avail - sp.width, y));
   y += sp.height + gapV;
   aj.paint(canvas, Offset(_mx, y));
-  y += aj.height + 28;
+  y += aj.height;
+  if (hasSecond) {
+    y += 14;
+    _divider(canvas, _pageW / 2, y + 8, _avail * .35, theme.accent);
+    y += 16 + 14;
+    sp2!.paint(canvas, Offset(_mx + _avail - sp2.width, y));
+    y += sp2.height + gapV;
+    aj2!.paint(canvas, Offset(_mx, y));
+    y += aj2.height;
+  }
+  y += 28;
   _divider(canvas, _pageW / 2, y + 8, _avail * .5, theme.accent);
   y += 16 + 12;
   f1.paint(canvas, Offset(_mx, y));
@@ -1368,22 +1390,29 @@ Future<Uint8List> buildVerseImage({
 }
 
 /// نسخ البيت كنص مع اسم القصيدة
-Future<void> copyVerseText(BuildContext context, Poem poem, Verse v) async {
+Future<void> copyVerseText(BuildContext context, Poem poem, Verse v,
+    [Verse? next]) async {
+  final nextText = next == null
+      ? ''
+      : '${displayText(next.sadr).trim()}\n${displayText(next.ajz).trim()}\n';
   final text = '${displayText(v.sadr).trim()}\n${displayText(v.ajz).trim()}\n'
+      '$nextText'
       '— ${poem.title}\nكلمات شاعر رسول الله ﷺ / عبدالرحمن مصطفى الأزهري';
   await Clipboard.setData(ClipboardData(text: text));
   if (!context.mounted) return;
   ScaffoldMessenger.of(context)
     ..hideCurrentSnackBar()
-    ..showSnackBar(const SnackBar(
-      content: Text('تم نسخ البيت', textAlign: TextAlign.center),
-      duration: Duration(seconds: 2),
+    ..showSnackBar(SnackBar(
+      content: Text(next == null ? 'تم نسخ البيت' : 'تم نسخ البيتين',
+          textAlign: TextAlign.center),
+      duration: const Duration(seconds: 2),
     ));
 }
 
 /// نافذة تصميم صورة البيت (معاينة حيّة) ثم الحفظ
 Future<void> showVerseImageSheet(
-    BuildContext context, String diwan, Poem poem, Verse verse) async {
+    BuildContext context, String diwan, Poem poem, Verse verse,
+    {Verse? nextVerse}) async {
   final messenger = ScaffoldMessenger.of(context);
   var themeI = 0;
   var paperI = 0;
@@ -1435,6 +1464,8 @@ Future<void> showVerseImageSheet(
               title: poem.title,
               sadr: verse.sadr,
               ajz: verse.ajz,
+              sadr2: nextVerse?.sadr,
+              ajz2: nextVerse?.ajz,
               theme: pdfThemes[themeI],
               textColor: colorChoices[textI].color,
               paper: paperChoices[paperI].color,
@@ -1474,7 +1505,7 @@ Future<void> showVerseImageSheet(
                   padding: const EdgeInsets.fromLTRB(20, 14, 20, 8),
                   child: Align(
                     alignment: AlignmentDirectional.centerStart,
-                    child: Text('حفظ البيت كصورة',
+                    child: Text(nextVerse == null ? 'حفظ البيت كصورة' : 'حفظ البيتين كصورة',
                         style: TextStyle(
                             fontSize: 19,
                             fontWeight: FontWeight.bold,
@@ -1598,7 +1629,7 @@ Future<void> showVerseImageSheet(
                               padding: const EdgeInsets.symmetric(vertical: 14)),
                           onPressed: () async {
                             Navigator.pop(ctx);
-                            await copyVerseText(context, poem, verse);
+                            await copyVerseText(context, poem, verse, nextVerse);
                           },
                           icon: const Icon(Icons.copy_rounded),
                           label: const Text('نسخ النص'),
