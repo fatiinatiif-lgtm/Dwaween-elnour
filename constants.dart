@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
-const appGreen = Color(0xFF075B3B);
-const appDarkGreen = Color(0xFF033D2B);
-const appGold = Color(0xFFC69B45);
-const paper = Color(0xFFFFFCF5);
+// ألوان التطبيق: بني وبيج (الأسماء القديمة محفوظة كي لا تتأثر بقية الملفات)
+const appGreen = Color(0xFF6D4C41); // البني الأساسي
+const appDarkGreen = Color(0xFF3E2723); // البني الداكن
+const appGold = Color(0xFFC9A24B);
+const paper = Color(0xFFF5ECDC); // البيج
