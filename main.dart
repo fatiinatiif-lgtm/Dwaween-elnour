@@ -26,6 +26,7 @@ const accentGold = Color(0xFFC9A24B);
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await loadFontSettings();
+  await loadFavorites();
   runApp(const DiwanApp());
 }
 
@@ -154,7 +155,7 @@ class MainShell extends StatefulWidget {
 
 class _MainShellState extends State<MainShell> {
   int selected = 0;
-  final pages = const [HomePage(), DiwansPage(), SettingsPage()];
+  final pages = const [HomePage(), DiwansPage(), FavoritesPage(), SettingsPage()];
 
   @override
   Widget build(BuildContext context) => Scaffold(
@@ -174,6 +175,7 @@ class _FancyBottomBar extends StatelessWidget {
   static const _items = [
     (Icons.home_rounded, 'الرئيسية'),
     (Icons.auto_stories_rounded, 'الدواوين'),
+    (Icons.favorite_rounded, 'المفضلة'),
     (Icons.settings_rounded, 'الإعدادات'),
   ];
 
@@ -218,14 +220,14 @@ class _FancyBottomBar extends StatelessWidget {
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Icon(_items[i].$1,
-                                size: 34,
+                                size: 30,
                                 color: selected == i
                                     ? brownDark
                                     : beige.withOpacity(.8)),
                             const SizedBox(height: 2),
                             Text(_items[i].$2,
                                 style: TextStyle(
-                                    fontSize: 13,
+                                    fontSize: 12,
                                     fontWeight: selected == i
                                         ? FontWeight.bold
                                         : FontWeight.w500,
@@ -342,20 +344,10 @@ class _HomePageState extends State<HomePage> {
                 child: Text('لا توجد نتائج مطابقة.'),
               )
             else
-              ...results.map((h) => Card(
-                    child: ListTile(
-                      title: Text(h.poem.title),
-                      subtitle: Text(
-                        h.snippet.isEmpty ? h.diwan : '${h.diwan}\n${h.snippet}',
-                        maxLines: 3,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      onTap: () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                              builder: (_) =>
-                                  PoemPage(poem: h.poem, diwan: h.diwan))),
-                    ),
+              ...results.map((h) => PoemTile(
+                    poem: h.poem,
+                    diwan: h.diwan,
+                    snippet: h.snippet,
                   )),
           ] else ...[
             const SectionHeading('الدواوين الشعرية'),
@@ -476,28 +468,118 @@ class DiwanTile extends StatelessWidget {
   final String name;
   final int number;
   const DiwanTile({super.key, required this.name, required this.number});
+
   @override
-  Widget build(BuildContext context) => Card(
-        elevation: 1,
-        color: cream,
-        margin: const EdgeInsets.only(bottom: 10),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(14),
-          side: BorderSide(color: accentGold.withOpacity(.45)),
+  Widget build(BuildContext context) {
+    final count = (poems[name] ?? []).length;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(20),
+          gradient: const LinearGradient(
+              begin: Alignment.topRight,
+              end: Alignment.bottomLeft,
+              colors: [brown, brownDark]),
+          border: Border.all(color: accentGold, width: 1.4),
+          boxShadow: [
+            BoxShadow(
+                color: Colors.black.withOpacity(.22),
+                blurRadius: 8,
+                offset: const Offset(0, 3)),
+          ],
         ),
-        child: ListTile(
-          leading: CircleAvatar(
-            radius: 16,
-            backgroundColor: brown,
-            child: Text(arDigits(number),
-                style: const TextStyle(color: accentGold, fontWeight: FontWeight.bold)),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(18),
+          child: Stack(
+            children: [
+              Positioned.fill(
+                  child: RepaintBoundary(
+                      child: CustomPaint(painter: _PatternPainter()))),
+              Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) => DiwanDetailPage(name: name))),
+                  child: Padding(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+                    child: Row(
+                      children: [
+                        _NumberStar(
+                            number: number,
+                            size: 56,
+                            fill: accentGold,
+                            textColor: brownDark),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(name,
+                                  style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 17,
+                                      height: 1.4,
+                                      fontWeight: FontWeight.bold)),
+                              const SizedBox(height: 5),
+                              Row(
+                                children: [
+                                  const Icon(Icons.auto_stories_rounded,
+                                      size: 15, color: accentGold),
+                                  const SizedBox(width: 5),
+                                  Text('${arDigits(count)} قصيدة',
+                                      style: const TextStyle(
+                                          color: Color(0xFFE8D9BC),
+                                          fontSize: 12.5)),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                        const Icon(Icons.chevron_left_rounded,
+                            color: accentGold, size: 30),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
-          title: Text(name, style: const TextStyle(fontWeight: FontWeight.w600)),
-          subtitle: Text('${arDigits((poems[name] ?? []).length)} قصيدة',
-              style: const TextStyle(fontSize: 12)),
-          trailing: const Icon(Icons.chevron_left),
-          onTap: () => Navigator.push(context,
-              MaterialPageRoute(builder: (_) => DiwanDetailPage(name: name))),
+        ),
+      ),
+    );
+  }
+}
+
+/// نجمة ثمانية يتوسطها رقم
+class _NumberStar extends StatelessWidget {
+  final int number;
+  final double size;
+  final Color fill;
+  final Color textColor;
+  const _NumberStar({
+    required this.number,
+    required this.size,
+    required this.fill,
+    required this.textColor,
+  });
+  @override
+  Widget build(BuildContext context) => SizedBox(
+        width: size,
+        height: size,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            CustomPaint(size: Size(size, size), painter: _StarPainter(fill)),
+            Text(arDigits(number),
+                style: TextStyle(
+                    color: textColor,
+                    fontWeight: FontWeight.bold,
+                    fontSize: size * .3)),
+          ],
         ),
       );
 }
@@ -510,32 +592,253 @@ class DiwanDetailPage extends StatelessWidget {
     final list = poems[name] ?? [];
     return Scaffold(
       appBar: AppBar(title: Text(name, style: const TextStyle(fontSize: 16))),
-      body: list.isEmpty
-          ? const Center(child: Text('ستظهر القصائد هنا عند إضافتها.'))
-          : ListView.builder(
-              padding: const EdgeInsets.all(16),
-              itemCount: list.length,
-              itemBuilder: (_, i) => Card(
-                color: cream,
-                margin: const EdgeInsets.only(bottom: 10),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14),
-                  side: BorderSide(color: accentGold.withOpacity(.45)),
-                ),
-                child: ListTile(
-                  leading: const Icon(Icons.auto_stories, color: brown),
-                  title: Text(list[i].title,
-                      style: const TextStyle(fontWeight: FontWeight.w600)),
-                  trailing: const Icon(Icons.chevron_left),
-                  onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                          builder: (_) => PoemPage(poem: list[i], diwan: name))),
-                ),
-              ),
-            ),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
+        children: [
+          PoemHeader(title: name, diwan: '${arDigits(list.length)} قصيدة'),
+          const SizedBox(height: 18),
+          if (list.isEmpty)
+            const Padding(
+              padding: EdgeInsets.all(24),
+              child: Center(child: Text('ستظهر القصائد هنا عند إضافتها.')),
+            )
+          else
+            for (var i = 0; i < list.length; i++)
+              PoemTile(poem: list[i], diwan: name, number: i + 1),
+        ],
+      ),
     );
   }
+}
+
+/// بطاقة القصيدة (في الديوان / البحث / المفضلة) مع علامة المفضلة
+class PoemTile extends StatelessWidget {
+  final Poem poem;
+  final String diwan;
+  final int? number;
+  final String snippet;
+  const PoemTile({
+    super.key,
+    required this.poem,
+    required this.diwan,
+    this.number,
+    this.snippet = '',
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final count = versesLabel(poem.verses.length);
+    final sub = number == null ? '$diwan  •  $count' : count;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Material(
+        color: cream,
+        elevation: 1.5,
+        shadowColor: Colors.black38,
+        clipBehavior: Clip.antiAlias,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: BorderSide(color: accentGold.withOpacity(.55)),
+        ),
+        child: InkWell(
+          onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                  builder: (_) => PoemPage(poem: poem, diwan: diwan))),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(4, 10, 12, 10),
+            child: Row(
+              children: [
+                if (number != null)
+                  _NumberStar(
+                      number: number!,
+                      size: 46,
+                      fill: brown,
+                      textColor: accentGold)
+                else
+                  Container(
+                    width: 44,
+                    height: 44,
+                    decoration: const BoxDecoration(
+                        shape: BoxShape.circle, color: brown),
+                    child: const Icon(Icons.menu_book_rounded,
+                        color: accentGold, size: 22),
+                  ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(poem.title,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                              fontSize: 16,
+                              height: 1.35,
+                              fontWeight: FontWeight.w700,
+                              color: brownDark)),
+                      const SizedBox(height: 3),
+                      Text(sub,
+                          style: const TextStyle(
+                              fontSize: 12, color: Colors.black54)),
+                      if (snippet.isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        Text(snippet,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                                fontSize: 12.5,
+                                height: 1.4,
+                                color: Colors.black54)),
+                      ],
+                    ],
+                  ),
+                ),
+                FavButton(diwan: diwan, poem: poem),
+                const Icon(Icons.chevron_left_rounded,
+                    color: accentGold, size: 26),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// عدد الأبيات بصيغة عربية سليمة
+String versesLabel(int n) {
+  if (n == 1) return 'بيت واحد';
+  if (n == 2) return 'بيتان';
+  if (n >= 3 && n <= 10) return '${arDigits(n)} أبيات';
+  return '${arDigits(n)} بيتًا';
+}
+
+// ───────────── المفضلة ─────────────
+
+/// القصائد المفضلة (مفتاح القصيدة = اسم الديوان + عنوانها)
+final ValueNotifier<Set<String>> favorites = ValueNotifier<Set<String>>({});
+
+String favKey(String diwan, Poem p) => '$diwan\u0001${p.title}';
+
+bool isFav(String diwan, Poem p) => favorites.value.contains(favKey(diwan, p));
+
+void toggleFav(String diwan, Poem p) {
+  final k = favKey(diwan, p);
+  final s = Set<String>.from(favorites.value);
+  if (!s.remove(k)) s.add(k);
+  favorites.value = s; // نسخة جديدة ليتم الإشعار والحفظ
+}
+
+Future<void> loadFavorites() async {
+  try {
+    final p = await SharedPreferences.getInstance();
+    favorites.value = (p.getStringList('favorites') ?? <String>[]).toSet();
+    favorites.addListener(
+        () => p.setStringList('favorites', favorites.value.toList()));
+  } catch (_) {
+    // لو فشل الحفظ تعمل المفضلة داخل الجلسة فقط
+  }
+}
+
+/// زرار القلب: يضيف القصيدة للمفضلة أو يشيلها
+class FavButton extends StatelessWidget {
+  final String diwan;
+  final Poem poem;
+  final bool dark; // true = فوق شريط بني (أبيض)
+  final double size;
+  const FavButton({
+    super.key,
+    required this.diwan,
+    required this.poem,
+    this.dark = false,
+    this.size = 26,
+  });
+
+  @override
+  Widget build(BuildContext context) => ValueListenableBuilder<Set<String>>(
+        valueListenable: favorites,
+        builder: (_, __, ___) {
+          final on = isFav(diwan, poem);
+          final active =
+              dark ? const Color(0xFFFF8A80) : const Color(0xFFC62828);
+          final idle = dark ? Colors.white : brown;
+          return IconButton(
+            tooltip: on ? 'إزالة من المفضلة' : 'إضافة إلى المفضلة',
+            iconSize: size,
+            onPressed: () => toggleFav(diwan, poem),
+            icon: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 220),
+              transitionBuilder: (c, a) => ScaleTransition(scale: a, child: c),
+              child: Icon(
+                on ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+                key: ValueKey(on),
+                color: on ? active : idle,
+              ),
+            ),
+          );
+        },
+      );
+}
+
+class FavoritesPage extends StatelessWidget {
+  const FavoritesPage({super.key});
+
+  @override
+  Widget build(BuildContext context) => SafeArea(
+        child: ValueListenableBuilder<Set<String>>(
+          valueListenable: favorites,
+          builder: (context, favs, _) {
+            final items = <Widget>[];
+            for (final k in favs.toList().reversed) {
+              final parts = k.split('\u0001');
+              if (parts.length != 2) continue;
+              final list = poems[parts[0]];
+              if (list == null) continue;
+              final idx = list.indexWhere((p) => p.title == parts[1]);
+              if (idx < 0) continue;
+              items.add(PoemTile(
+                  key: ValueKey(k), poem: list[idx], diwan: parts[0]));
+            }
+            return ListView(
+              padding: const EdgeInsets.fromLTRB(16, 18, 16, 24),
+              children: [
+                const SectionHeading('المفضلة'),
+                if (items.isEmpty)
+                  const _EmptyFavorites()
+                else
+                  ...items,
+              ],
+            );
+          },
+        ),
+      );
+}
+
+class _EmptyFavorites extends StatelessWidget {
+  const _EmptyFavorites();
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 34),
+        decoration: BoxDecoration(
+          color: cream,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: accentGold.withOpacity(.5)),
+        ),
+        child: const Column(
+          children: [
+            Icon(Icons.favorite_border_rounded, size: 64, color: accentGold),
+            SizedBox(height: 14),
+            Text('لا توجد قصائد في المفضلة بعد',
+                style: TextStyle(
+                    fontSize: 17, fontWeight: FontWeight.bold, color: brown)),
+            SizedBox(height: 8),
+            Text('اضغط على علامة القلب بجانب أي قصيدة لتجدها هنا.',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 14, color: Colors.black54)),
+          ],
+        ),
+      );
 }
 
 // ───────────── صفحة القصيدة ─────────────
@@ -573,6 +876,7 @@ class PoemPage extends StatelessWidget {
         appBar: AppBar(
           title: const Text('دواوين النور', style: TextStyle(fontSize: 17)),
           actions: [
+            FavButton(diwan: diwan, poem: poem, dark: true, size: 28),
             IconButton(
               tooltip: 'نسخ القصيدة',
               iconSize: 28,
