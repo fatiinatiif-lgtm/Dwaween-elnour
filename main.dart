@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'poems_data.dart';
+import 'pdf_export.dart';
 
 // ملف التطبيق الكامل (ما عدا القصائد: poems_data.dart)
 // الأقسام بالترتيب:
@@ -561,6 +562,33 @@ class PoemPage extends StatelessWidget {
               iconSize: 28,
               icon: const Icon(Icons.copy_rounded),
               onPressed: () => _copy(context),
+            ),
+            PopupMenuButton<String>(
+              tooltip: 'خيارات',
+              icon: const Icon(Icons.more_vert_rounded),
+              color: cream,
+              onSelected: (v) {
+                if (v == 'pdf') showPoemPdfSheet(context, poem, diwan);
+                if (v == 'copy') _copy(context);
+              },
+              itemBuilder: (_) => const [
+                PopupMenuItem(
+                  value: 'pdf',
+                  child: Row(children: [
+                    Icon(Icons.picture_as_pdf_rounded, color: brown),
+                    SizedBox(width: 10),
+                    Text('تحويل القصيدة إلى PDF'),
+                  ]),
+                ),
+                PopupMenuItem(
+                  value: 'copy',
+                  child: Row(children: [
+                    Icon(Icons.copy_rounded, color: brown),
+                    SizedBox(width: 10),
+                    Text('نسخ القصيدة'),
+                  ]),
+                ),
+              ],
             ),
           ],
         ),
