@@ -33,6 +33,7 @@ jobs:
       - name: اسم التطبيق على الهاتف
         run: sed -i 's/android:label="[^"]*"/android:label="دواوين النور"/' android/app/src/main/AndroidManifest.xml
 
+      - run: flutter pub add pdf file_picker:^8.3.7
       - run: flutter pub get
       - run: dart run flutter_launcher_icons
       - run: flutter build apk --release
