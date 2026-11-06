@@ -22,8 +22,9 @@ import 'pdf_export.dart';
 
 /// خط كلمة "سيد الشعراء" في شاشة البداية.
 /// غيّريه لأي family من pubspec.yaml:
-/// 'ArefRuqaa' (رقعة) • 'Amoshref' (ثلث المشرف) • 'WinsoftThuluth' • 'DecoThuluth'
-const String kSplashFont = 'ArefRuqaa';
+/// 'Amoshref' (ثلث المشرف) • 'WinsoftThuluth' • 'DecoThuluth'
+/// (لا تستخدمي الخطوط الملوّنة مثل ArefRuqaa أو Topaz3D أو AAGalaxy هنا)
+const String kSplashFont = 'Amoshref';
 
 class AppPalette {
   final String label;
@@ -151,34 +152,35 @@ const appPalettes = <AppPalette>[
       paper: Color(0xFFF7FBFE),
       ink: Color(0xFF0B2F4A),
       inkSoft: Color(0xFF5A7184)),
-  AppPalette(
-      label: 'ليل أزرق',
-      primary: Color(0xFF4A6FA5),
-      primaryDark: Color(0xFF1B2A41),
-      bg: Color(0xFF11151B),
-      card: Color(0xFF1B212B),
-      accent: Color(0xFFE0B955),
-      paper: Color(0xFFF4ECD8),
-      ink: Color(0xFFF1EBDD),
-      inkSoft: Color(0xFFB5B2A8),
-      dark: true),
-  AppPalette(
-      label: 'ليل ذهبي',
-      primary: Color(0xFF9A6B45),
-      primaryDark: Color(0xFF2A1D16),
-      bg: Color(0xFF17110E),
-      card: Color(0xFF241A15),
-      accent: Color(0xFFD4AF37),
-      paper: Color(0xFFF4E9D2),
-      ink: Color(0xFFF3E8D4),
-      inkSoft: Color(0xFFBBAE9B),
-      dark: true),
 ];
 
 /// فهرس الثيم المختار (يُحفظ على الهاتف)
 final ValueNotifier<int> appThemeIndex = ValueNotifier<int>(0);
 
-AppPalette get currentPalette => appPalettes[appThemeIndex.value];
+/// الوضع الداكن (يطبَّق على التطبيق وورقة القصيدة، ولا يؤثر على ملف الـ PDF)
+final ValueNotifier<bool> appDarkMode = ValueNotifier<bool>(false);
+
+/// يشتق نسخة داكنة من الثيم المختار (نفس هويته اللونية)
+AppPalette _darkOf(AppPalette p) => AppPalette(
+      label: p.label,
+      primary: Color.lerp(p.primary, Colors.white, .16)!,
+      primaryDark: Color.lerp(p.primaryDark, Colors.black, .35)!,
+      bg: Color.lerp(p.primaryDark, Colors.black, .76)!,
+      card: Color.lerp(p.primaryDark, Colors.black, .56)!,
+      accent: Color.lerp(p.accent, Colors.white, .1)!,
+      paper: Color.lerp(p.primaryDark, Colors.black, .5)!,
+      ink: const Color(0xFFF1EBDD),
+      inkSoft: const Color(0xFFB8B2A4),
+      dark: true,
+    );
+
+AppPalette get currentPalette => appDarkMode.value
+    ? _darkOf(appPalettes[appThemeIndex.value])
+    : appPalettes[appThemeIndex.value];
+
+/// لون خط القصيدة: في الوضع الداكن يُفتَّح لون الخط المختار ليُقرأ على الورقة الداكنة
+Color poemInk(Color c) =>
+    appDarkMode.value ? Color.lerp(c, Colors.white, .82)! : c;
 
 // أسماء الألوان القديمة بقيت كما هي، لكنها الآن تتبع الثيم المختار
 Color get brown => currentPalette.primary;
@@ -190,6 +192,11 @@ Color get paperColor => currentPalette.paper;
 Color get ink => currentPalette.ink;
 Color get inkSoft => currentPalette.inkSoft;
 
+/// آخر قصيدة تمّ فتحها (مفتاحها = اسم الديوان + عنوانها) وتُحفظ على الهاتف
+final ValueNotifier<String?> lastRead = ValueNotifier<String?>(null);
+
+void markLastRead(String diwan, Poem p) => lastRead.value = favKey(diwan, p);
+
 Future<void> loadAppTheme() async {
   try {
     final p = await SharedPreferences.getInstance();
@@ -197,8 +204,16 @@ Future<void> loadAppTheme() async {
     if (i != null && i >= 0 && i < appPalettes.length) {
       appThemeIndex.value = i;
     }
+    appDarkMode.value = p.getBool('appDarkMode') ?? false;
+    lastRead.value = p.getString('lastRead');
+    lastRead.addListener(() {
+      final v = lastRead.value;
+      if (v != null) p.setString('lastRead', v);
+    });
     appThemeIndex
         .addListener(() => p.setInt('appThemeIndex', appThemeIndex.value));
+    appDarkMode
+        .addListener(() => p.setBool('appDarkMode', appDarkMode.value));
   } catch (_) {
     // لو فشل الحفظ يشتغل التطبيق بالثيم الافتراضي
   }
@@ -261,11 +276,13 @@ class _DiwanAppState extends State<DiwanApp> {
   void initState() {
     super.initState();
     appThemeIndex.addListener(_onTheme);
+    appDarkMode.addListener(_onTheme);
   }
 
   @override
   void dispose() {
     appThemeIndex.removeListener(_onTheme);
+    appDarkMode.removeListener(_onTheme);
     super.dispose();
   }
 
@@ -306,21 +323,11 @@ class _SplashScreenState extends State<SplashScreen> {
   int count = 5;
   Timer? timer;
 
-  // ذهبي متدرّج للكلمات + ظل ناعم
-  TextStyle _splashStyle() => TextStyle(
+  TextStyle _baseStyle() => TextStyle(
       fontFamily: kSplashFont,
       fontSize: 88,
       height: 1.25,
-      fontWeight: FontWeight.w700,
-      foreground: Paint()
-        ..shader = const LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [Color(0xFFFFF1C1), Color(0xFFE6C26B), Color(0xFFB98A2E)],
-        ).createShader(const Rect.fromLTWH(0, 0, 400, 120)),
-      shadows: const [
-        Shadow(color: Color(0x80000000), blurRadius: 10, offset: Offset(0, 4)),
-      ]);
+      fontWeight: FontWeight.w700);
 
   @override
   void initState() {
@@ -344,11 +351,39 @@ class _SplashScreenState extends State<SplashScreen> {
     super.dispose();
   }
 
+  // الكلمة: طبقة سفلية للظل + طبقة علوية بتدرّج ذهبي
   Widget _word(String t) => Padding(
         padding: const EdgeInsets.symmetric(horizontal: 24),
         child: FittedBox(
           fit: BoxFit.scaleDown,
-          child: Text(t, style: _splashStyle()),
+          child: Stack(
+            children: [
+              Text(t,
+                  style: _baseStyle().copyWith(
+                    color: Colors.transparent,
+                    shadows: const [
+                      Shadow(
+                          color: Color(0x99000000),
+                          blurRadius: 10,
+                          offset: Offset(0, 4)),
+                    ],
+                  )),
+              ShaderMask(
+                blendMode: BlendMode.srcIn,
+                shaderCallback: (r) => const LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Color(0xFFFFF1C1),
+                    Color(0xFFE6C26B),
+                    Color(0xFFB98A2E)
+                  ],
+                ).createShader(r),
+                child: Text(t,
+                    style: _baseStyle().copyWith(color: Colors.white)),
+              ),
+            ],
+          ),
         ),
       );
 
@@ -534,7 +569,8 @@ class _SearchHit {
   final String diwan;
   final Poem poem;
   final String snippet;
-  const _SearchHit(this.diwan, this.poem, this.snippet);
+  final int verseMatches; // عدد الأبيات التي ورد فيها النص
+  const _SearchHit(this.diwan, this.poem, this.snippet, this.verseMatches);
 }
 
 class HomePage extends StatefulWidget {
@@ -559,16 +595,17 @@ class _HomePageState extends State<HomePage> {
     for (final e in poems.entries) {
       for (final poem in e.value) {
         String? snippet;
+        var matches = 0;
         for (final v in poem.verses) {
           if (normalizeArabic('${v.sadr} ${v.ajz}').contains(q)) {
-            snippet = '${v.sadr} … ${v.ajz}';
-            break;
+            snippet ??= '${v.sadr} … ${v.ajz}';
+            matches++;
           }
         }
         if (snippet == null && normalizeArabic(poem.title).contains(q)) {
           snippet = '';
         }
-        if (snippet != null) out.add(_SearchHit(e.key, poem, snippet));
+        if (snippet != null) out.add(_SearchHit(e.key, poem, snippet, matches));
       }
     }
     return out;
@@ -580,8 +617,10 @@ class _HomePageState extends State<HomePage> {
     final results = hits;
     return SafeArea(
       child: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 18, 16, 24),
+        padding: const EdgeInsets.fromLTRB(16, 10, 16, 24),
         children: [
+          const _DarkModeBar(),
+          const SizedBox(height: 8),
           Container(
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(18),
@@ -625,6 +664,7 @@ class _HomePageState extends State<HomePage> {
           const SizedBox(height: 26),
           if (searching) ...[
             const SectionHeading('نتائج البحث'),
+            _ResultsCount(results: results),
             if (results.isEmpty)
               const Padding(
                 padding: EdgeInsets.all(18),
@@ -637,10 +677,350 @@ class _HomePageState extends State<HomePage> {
                     snippet: h.snippet,
                   )),
           ] else ...[
-            const SectionHeading('الدواوين الشعرية'),
-            ...diwanNames.take(3).toList().asMap().entries.map(
-                (e) => DiwanTile(name: e.value, number: e.key + 1)),
+            const _LastReadCard(),
+            const _VerseOfDayCard(),
           ],
+        ],
+      ),
+    );
+  }
+}
+
+/// بطاقة "أكمل القراءة": آخر قصيدة فتحتها
+class _LastReadCard extends StatelessWidget {
+  const _LastReadCard();
+  @override
+  Widget build(BuildContext context) => ValueListenableBuilder<String?>(
+        valueListenable: lastRead,
+        builder: (_, key, __) {
+          if (key == null) return const SizedBox.shrink();
+          final parts = key.split('\u0001');
+          if (parts.length != 2) return const SizedBox.shrink();
+          final list = poems[parts[0]];
+          if (list == null) return const SizedBox.shrink();
+          final i = list.indexWhere((p) => p.title == parts[1]);
+          if (i < 0) return const SizedBox.shrink();
+          final poem = list[i];
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 16),
+            child: Material(
+              color: cream,
+              elevation: 1.5,
+              shadowColor: Colors.black38,
+              clipBehavior: Clip.antiAlias,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(18),
+                side: BorderSide(color: accentGold.withOpacity(.55)),
+              ),
+              child: InkWell(
+                onTap: () {
+                  markLastRead(parts[0], poem);
+                  Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) =>
+                              PoemPage(poem: poem, diwan: parts[0])));
+                },
+                child: Padding(
+                  padding: const EdgeInsets.all(14),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 46,
+                        height: 46,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: brown,
+                          border: Border.all(color: accentGold, width: 1.4),
+                        ),
+                        child: Icon(Icons.bookmark_rounded,
+                            color: accentGold, size: 24),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('أكمل القراءة',
+                                style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                    color: brown)),
+                            const SizedBox(height: 2),
+                            Text(poem.title,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                    fontSize: 15.5,
+                                    fontWeight: FontWeight.bold,
+                                    color: ink)),
+                            Text(parts[0],
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(fontSize: 12, color: inkSoft)),
+                          ],
+                        ),
+                      ),
+                      Icon(Icons.chevron_left_rounded,
+                          color: accentGold, size: 28),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
+      );
+}
+
+/// بطاقة "بيت اليوم": بيت يتغيّر كل يوم + حفظه كصورة أو نسخه أو فتح قصيدته
+class _VerseOfDayCard extends StatelessWidget {
+  const _VerseOfDayCard();
+
+  Widget _action(IconData icon, String label, VoidCallback onTap) => Material(
+        color: Colors.black.withOpacity(.2),
+        shape: StadiumBorder(side: BorderSide(color: accentGold.withOpacity(.6))),
+        child: InkWell(
+          customBorder: const StadiumBorder(),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(icon, size: 17, color: accentGold),
+                const SizedBox(width: 6),
+                Text(label,
+                    style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w600)),
+              ],
+            ),
+          ),
+        ),
+      );
+
+  @override
+  Widget build(BuildContext context) {
+    final all = <({String diwan, Poem poem, Verse verse})>[];
+    for (final e in poems.entries) {
+      for (final p in e.value) {
+        for (final v in p.verses) {
+          all.add((diwan: e.key, poem: p, verse: v));
+        }
+      }
+    }
+    if (all.isEmpty) return const SizedBox.shrink();
+    final d = DateTime.now();
+    final day = DateTime(d.year, d.month, d.day).difference(DateTime(2020)).inDays;
+    final pick = all[(day * 7919) % all.length];
+    final style = withPoemFont(const TextStyle(
+            color: Colors.white, fontSize: 20, height: 1.7))
+        .copyWith(fontWeight: poemFontWeight);
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(24),
+        gradient: LinearGradient(
+            begin: Alignment.topRight,
+            end: Alignment.bottomLeft,
+            colors: [brown, brownDark]),
+        boxShadow: _softShadow(.25),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(24),
+        child: Stack(
+          children: [
+            Positioned.fill(
+                child: RepaintBoundary(
+                    child: CustomPaint(painter: _PatternPainter(k: .9)))),
+            Positioned.fill(
+              child: Padding(
+                padding: const EdgeInsets.all(5),
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(19),
+                    border: Border.all(
+                        color: accentGold.withOpacity(.6), width: 1),
+                  ),
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 18),
+              child: Column(
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      CustomPaint(
+                          size: const Size(16, 16),
+                          painter: _StarPainter(accentGold)),
+                      const SizedBox(width: 8),
+                      Text('بيت اليوم',
+                          style: TextStyle(
+                              color: accentGold,
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold)),
+                      const SizedBox(width: 8),
+                      CustomPaint(
+                          size: const Size(16, 16),
+                          painter: _StarPainter(accentGold)),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 24),
+                    child: OrnamentDivider(),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(displayText(pick.verse.sadr).trim(),
+                      textAlign: TextAlign.center, style: style),
+                  Text(displayText(pick.verse.ajz).trim(),
+                      textAlign: TextAlign.center, style: style),
+                  const SizedBox(height: 8),
+                  Text('— ${pick.poem.title}',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                          color: Color(0xFFE8D9BC), fontSize: 13)),
+                  const SizedBox(height: 14),
+                  Wrap(
+                    alignment: WrapAlignment.center,
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      _action(Icons.image_rounded, 'حفظ كصورة', () {
+                        showVerseImageSheet(
+                            context, pick.diwan, pick.poem, pick.verse);
+                      }),
+                      _action(Icons.copy_rounded, 'نسخ', () async {
+                        await copyVerseText(
+                            context, pick.poem, pick.verse);
+                      }),
+                      _action(Icons.menu_book_rounded, 'القصيدة', () {
+                        markLastRead(pick.diwan, pick.poem);
+                        Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                                builder: (_) => PoemPage(
+                                    poem: pick.poem, diwan: pick.diwan)));
+                      }),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// شريط أعلى الشاشة الرئيسية: اسم التطبيق + زرار الوضع الداكن
+class _DarkModeBar extends StatelessWidget {
+  const _DarkModeBar();
+  @override
+  Widget build(BuildContext context) => ValueListenableBuilder<bool>(
+        valueListenable: appDarkMode,
+        builder: (_, dark, __) => Row(
+          children: [
+            CustomPaint(
+                size: const Size(18, 18), painter: _StarPainter(accentGold)),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text('دواوين النور',
+                  style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: brown)),
+            ),
+            Material(
+              color: cream,
+              shape: StadiumBorder(
+                  side: BorderSide(color: accentGold.withOpacity(.7))),
+              child: InkWell(
+                customBorder: const StadiumBorder(),
+                onTap: () => appDarkMode.value = !dark,
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 250),
+                        transitionBuilder: (c, a) =>
+                            RotationTransition(turns: a, child: c),
+                        child: Icon(
+                          dark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
+                          key: ValueKey(dark),
+                          color: accentGold,
+                          size: 22,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Text(dark ? 'الوضع الفاتح' : 'الوضع الداكن',
+                          style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: ink)),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+}
+
+String _poemsCount(int n) {
+  if (n == 0) return 'لا توجد قصائد';
+  if (n == 1) return 'قصيدة واحدة';
+  if (n == 2) return 'قصيدتان';
+  if (n <= 10) return '${arDigits(n)} قصائد';
+  return '${arDigits(n)} قصيدة';
+}
+
+String _versesIn(int n) {
+  if (n == 1) return 'بيت واحد';
+  if (n == 2) return 'بيتين';
+  if (n <= 10) return '${arDigits(n)} أبيات';
+  return '${arDigits(n)} بيتًا';
+}
+
+/// عدد نتائج البحث: عدد القصائد وعدد الأبيات التي ورد فيها النص
+class _ResultsCount extends StatelessWidget {
+  final List<_SearchHit> results;
+  const _ResultsCount({required this.results});
+  @override
+  Widget build(BuildContext context) {
+    final verses = results.fold<int>(0, (s, h) => s + h.verseMatches);
+    final text = results.isEmpty
+        ? 'لم يُعثر على نتائج'
+        : 'عدد النتائج: ${_poemsCount(results.length)}'
+            '${verses > 0 ? ' • ورد النص في ${_versesIn(verses)}' : ''}';
+    return Container(
+      margin: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: accentGold.withOpacity(.14),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: accentGold.withOpacity(.55)),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.manage_search_rounded, color: accentGold, size: 22),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(text,
+                style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: ink)),
+          ),
         ],
       ),
     );
@@ -840,10 +1220,10 @@ class DiwanTile extends StatelessWidget {
                       children: [
                         _NumberStar(
                             number: number,
-                            size: 60,
-                            fill: accentGold,
-                            textColor: brownDark,
-                            stroke: Colors.white.withOpacity(.7)),
+                            size: 64,
+                            ring: accentGold,
+                            core: brownDark,
+                            textColor: accentGold),
                         const SizedBox(width: 16),
                         Expanded(
                           child: Column(
@@ -907,21 +1287,22 @@ class DiwanTile extends StatelessWidget {
   }
 }
 
-/// نجمة ثمانية يتوسطها رقم (أو أيقونة)
+/// شارة الترقيم: نجمة ثمانية (مربعان متداخلان) ذهبية متدرّجة
+/// بداخلها دائرة داكنة بحلقة رفيعة، ويتوسطها الرقم (أو أيقونة)
 class _NumberStar extends StatelessWidget {
   final int? number;
   final IconData? icon;
   final double size;
-  final Color fill;
+  final Color ring; // لون النجمة الخارجية
+  final Color core; // لون الدائرة الداخلية
   final Color textColor;
-  final Color? stroke;
   const _NumberStar({
     this.number,
     this.icon,
     required this.size,
-    required this.fill,
+    required this.ring,
+    required this.core,
     required this.textColor,
-    this.stroke,
   });
   @override
   Widget build(BuildContext context) => SizedBox(
@@ -931,18 +1312,93 @@ class _NumberStar extends StatelessWidget {
           alignment: Alignment.center,
           children: [
             CustomPaint(
-                size: Size(size, size), painter: _StarPainter(fill, stroke)),
+                size: Size(size, size), painter: _BadgePainter(ring, core)),
             if (icon != null)
-              Icon(icon, color: textColor, size: size * .42)
+              Icon(icon, color: textColor, size: size * .36)
             else
-              Text(arDigits(number ?? 0),
-                  style: TextStyle(
-                      color: textColor,
-                      fontWeight: FontWeight.bold,
-                      fontSize: size * .3)),
+              SizedBox(
+                width: size * .5,
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(arDigits(number ?? 0),
+                      style: TextStyle(
+                          color: textColor,
+                          fontWeight: FontWeight.bold,
+                          height: 1.1,
+                          fontSize: size * .34)),
+                ),
+              ),
           ],
         ),
       );
+}
+
+class _BadgePainter extends CustomPainter {
+  final Color ring;
+  final Color core;
+  const _BadgePainter(this.ring, this.core);
+
+  Path _square(Offset c, double r, double rot) {
+    final p = Path();
+    for (var i = 0; i < 4; i++) {
+      final a = rot + i * math.pi / 2;
+      final pt = Offset(c.dx + r * math.cos(a), c.dy + r * math.sin(a));
+      if (i == 0) {
+        p.moveTo(pt.dx, pt.dy);
+      } else {
+        p.lineTo(pt.dx, pt.dy);
+      }
+    }
+    return p..close();
+  }
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final c = size.center(Offset.zero);
+    final r = size.width / 2;
+    final star = Path.combine(PathOperation.union, _square(c, r, math.pi / 4),
+        _square(c, r, 0));
+    final rect = Rect.fromCircle(center: c, radius: r);
+    // نجمة ذهبية متدرّجة
+    canvas.drawPath(
+        star,
+        Paint()
+          ..shader = LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Color.lerp(ring, Colors.white, .45)!,
+              ring,
+              Color.lerp(ring, Colors.black, .3)!,
+            ],
+          ).createShader(rect));
+    canvas.drawPath(
+        star,
+        Paint()
+          ..color = Color.lerp(ring, Colors.black, .45)!.withOpacity(.7)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = .8);
+    // الدائرة الداخلية
+    canvas.drawCircle(c, r * .66, Paint()..color = core);
+    canvas.drawCircle(
+        c,
+        r * .66,
+        Paint()
+          ..color = Color.lerp(ring, Colors.white, .35)!
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.4);
+    canvas.drawCircle(
+        c,
+        r * .56,
+        Paint()
+          ..color = ring.withOpacity(.45)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = .7);
+  }
+
+  @override
+  bool shouldRepaint(covariant _BadgePainter old) =>
+      old.ring != ring || old.core != core;
 }
 
 class DiwanDetailPage extends StatefulWidget {
@@ -1099,10 +1555,13 @@ class PoemTile extends StatelessWidget {
               Material(
                 color: Colors.transparent,
                 child: InkWell(
-                  onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                          builder: (_) => PoemPage(poem: poem, diwan: diwan))),
+                  onTap: () {
+                    markLastRead(diwan, poem);
+                    Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (_) => PoemPage(poem: poem, diwan: diwan)));
+                  },
                   child: Padding(
                     padding: const EdgeInsetsDirectional.fromSTEB(16, 12, 4, 12),
                     child: Row(
@@ -1110,17 +1569,17 @@ class PoemTile extends StatelessWidget {
                         if (number != null)
                           _NumberStar(
                               number: number,
-                              size: 46,
-                              fill: brown,
-                              textColor: Colors.white,
-                              stroke: accentGold)
+                              size: 50,
+                              ring: accentGold,
+                              core: brown,
+                              textColor: Colors.white)
                         else
                           _NumberStar(
                               icon: Icons.menu_book_rounded,
-                              size: 46,
-                              fill: brown,
-                              textColor: Colors.white,
-                              stroke: accentGold),
+                              size: 50,
+                              ring: accentGold,
+                              core: brown,
+                              textColor: Colors.white),
                         const SizedBox(width: 12),
                         Expanded(
                           child: Column(
@@ -1359,6 +1818,58 @@ class PoemPage extends StatelessWidget {
       ));
   }
 
+  /// اختيار بيت من القصيدة لحفظه كصورة
+  void _pickVerse(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: cream,
+      builder: (ctx) => SafeArea(
+        child: SizedBox(
+          height: MediaQuery.of(ctx).size.height * .75,
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Text('اختاري البيت',
+                    style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: brown)),
+              ),
+              Expanded(
+                child: ListView.separated(
+                  itemCount: poem.verses.length,
+                  separatorBuilder: (_, __) => const Divider(height: 1),
+                  itemBuilder: (_, i) {
+                    final v = poem.verses[i];
+                    return ListTile(
+                      leading: CircleAvatar(
+                        radius: 15,
+                        backgroundColor: brown,
+                        child: Text(arDigits(i + 1),
+                            style: const TextStyle(
+                                color: Colors.white, fontSize: 12)),
+                      ),
+                      title: Text(displayText(v.sadr),
+                          maxLines: 1, overflow: TextOverflow.ellipsis),
+                      subtitle: Text(displayText(v.ajz),
+                          maxLines: 1, overflow: TextOverflow.ellipsis),
+                      onTap: () {
+                        Navigator.pop(ctx);
+                        showVerseImageSheet(context, diwan, poem, v);
+                      },
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) => Scaffold(
         appBar: AppBar(
@@ -1378,6 +1889,7 @@ class PoemPage extends StatelessWidget {
               onSelected: (v) {
                 if (v == 'pdf') showPoemPdfSheet(context, poem, diwan);
                 if (v == 'copy') _copy(context);
+                if (v == 'verse') _pickVerse(context);
               },
               itemBuilder: (_) => [
                 PopupMenuItem(
@@ -1386,6 +1898,14 @@ class PoemPage extends StatelessWidget {
                     Icon(Icons.picture_as_pdf_rounded, color: brown),
                     const SizedBox(width: 10),
                     const Text('تحويل القصيدة إلى PDF'),
+                  ]),
+                ),
+                PopupMenuItem(
+                  value: 'verse',
+                  child: Row(children: [
+                    Icon(Icons.image_rounded, color: brown),
+                    const SizedBox(width: 10),
+                    const Text('حفظ بيت كصورة'),
                   ]),
                 ),
                 PopupMenuItem(
@@ -1472,7 +1992,7 @@ class _PoemFooter extends StatelessWidget {
           Text('كلمات شاعر رسول الله ﷺ',
               textAlign: TextAlign.center,
               style: TextStyle(
-                  color: p.dark ? const Color(0xFF3E2723) : p.primary,
+                  color: p.dark ? p.ink : p.primary,
                   fontSize: 15.5,
                   fontWeight: FontWeight.bold)),
           const SizedBox(height: 4),
@@ -1491,6 +2011,82 @@ class _PoemFooter extends StatelessWidget {
 // ───────────── الإعدادات ─────────────
 class SettingsPage extends StatelessWidget {
   const SettingsPage({super.key});
+
+  /// نافذة اختيار الثيم
+  void _pickTheme(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        decoration: BoxDecoration(
+          color: cream,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(26)),
+          border: Border(top: BorderSide(color: accentGold, width: 2)),
+        ),
+        child: SafeArea(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+                maxHeight: MediaQuery.of(ctx).size.height * .85),
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(18, 18, 18, 14),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.palette_rounded, color: accentGold),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text('مظهر التطبيق',
+                            style: TextStyle(
+                                fontSize: 19,
+                                fontWeight: FontWeight.bold,
+                                color: brown)),
+                      ),
+                      TextButton(
+                        onPressed: () => Navigator.pop(ctx),
+                        child: Text('تم',
+                            style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: brown)),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  ListenableBuilder(
+                    listenable: appThemeIndex,
+                    builder: (_, __) => LayoutBuilder(
+                      builder: (_, c) {
+                        const gap = 10.0;
+                        final w = (c.maxWidth - gap * 2) / 3;
+                        return Wrap(
+                          spacing: gap,
+                          runSpacing: gap,
+                          children: [
+                            for (var i = 0; i < appPalettes.length; i++)
+                              SizedBox(
+                                width: w,
+                                child: _ThemeCard(
+                                  p: appPalettes[i],
+                                  selected: appThemeIndex.value == i,
+                                  onTap: () => appThemeIndex.value = i,
+                                ),
+                              ),
+                          ],
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 
   Widget _sub(IconData icon, String text) => Padding(
         padding: const EdgeInsets.only(top: 4, bottom: 12),
@@ -1512,30 +2108,61 @@ class SettingsPage extends StatelessWidget {
           children: [
             const SectionHeading('الإعدادات'),
 
-            // ── ثيمات التطبيق ──
+            // ── ثيمات التطبيق (داخل زرار) ──
             _sub(Icons.palette_rounded, 'مظهر التطبيق'),
-            ListenableBuilder(
-              listenable: appThemeIndex,
-              builder: (_, __) => LayoutBuilder(
-                builder: (_, c) {
-                  const gap = 10.0;
-                  final w = (c.maxWidth - gap * 2) / 3;
-                  return Wrap(
-                    spacing: gap,
-                    runSpacing: gap,
-                    children: [
-                      for (var i = 0; i < appPalettes.length; i++)
-                        SizedBox(
-                          width: w,
-                          child: _ThemeCard(
-                            p: appPalettes[i],
-                            selected: appThemeIndex.value == i,
-                            onTap: () => appThemeIndex.value = i,
+            Material(
+              color: cream,
+              elevation: 1.5,
+              shadowColor: Colors.black38,
+              clipBehavior: Clip.antiAlias,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(18),
+                side: BorderSide(color: accentGold.withOpacity(.6)),
+              ),
+              child: InkWell(
+                onTap: () => _pickTheme(context),
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                  child: ListenableBuilder(
+                    listenable: appThemeIndex,
+                    builder: (_, __) {
+                      final p = appPalettes[appThemeIndex.value];
+                      return Row(
+                        children: [
+                          Container(
+                            width: 44,
+                            height: 44,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: p.primary,
+                              border: Border.all(color: p.accent, width: 3),
+                            ),
                           ),
-                        ),
-                    ],
-                  );
-                },
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('اختيار الثيم',
+                                    style: TextStyle(
+                                        fontSize: 17,
+                                        fontWeight: FontWeight.bold,
+                                        color: ink)),
+                                const SizedBox(height: 2),
+                                Text(p.label,
+                                    style: TextStyle(
+                                        fontSize: 13, color: inkSoft)),
+                              ],
+                            ),
+                          ),
+                          Icon(Icons.chevron_left_rounded,
+                              color: accentGold, size: 28),
+                        ],
+                      );
+                    },
+                  ),
+                ),
               ),
             ),
 
@@ -1589,6 +2216,28 @@ class SettingsPage extends StatelessWidget {
               title: const Text('عن التطبيق'),
               subtitle: const Text('دواوين النور — دواوين شعرية'),
             ),
+            const SizedBox(height: 24),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 40),
+              child: OrnamentDivider(),
+            ),
+            const SizedBox(height: 14),
+            Text('هدية إلى فضيلة الشيخ عبدالرحمن',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                    fontSize: 16,
+                    height: 1.6,
+                    fontWeight: FontWeight.w600,
+                    color: ink)),
+            const SizedBox(height: 4),
+            Text('نور النبي',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                    fontSize: 24,
+                    height: 1.5,
+                    fontWeight: FontWeight.bold,
+                    color: brown)),
+            const SizedBox(height: 10),
           ],
         ),
       );
@@ -1753,7 +2402,7 @@ class _PoemBodyState extends State<PoemBody> {
       withPoemFont(DefaultTextStyle.of(ctx).style.merge(TextStyle(
             fontSize: size,
             height: 1.0,
-            color: poemFontColor.value,
+            color: poemInk(poemFontColor.value),
             fontWeight: poemFontWeight,
           )));
 
@@ -1821,7 +2470,7 @@ class _PoemBodyState extends State<PoemBody> {
         builder: (ctx, c) {
           final base = poemFontSize.value;
           final key =
-              '${widget.poem.title}|${c.maxWidth.toStringAsFixed(1)}|$base|${poemFontColor.value}|${poemFontWeightIndex.value}|${poemFontFamilyIndex.value}|${removeTashkeel.value}';
+              '${widget.poem.title}|${c.maxWidth.toStringAsFixed(1)}|$base|${poemFontColor.value}|${poemFontWeightIndex.value}|${poemFontFamilyIndex.value}|${removeTashkeel.value}|${appDarkMode.value}';
           if (key != _key) {
             _compute(ctx, c.maxWidth, base);
             _key = key;
@@ -1851,7 +2500,7 @@ class _PoemBodyState extends State<PoemBody> {
                 const Padding(
                   padding: EdgeInsets.only(top: 6),
                   child: Text('بعض الأشطر طويلة جدًا فلُفّت على سطرين.',
-                      style: TextStyle(fontSize: 11, color: Colors.black45)),
+                      style: TextStyle(fontSize: 11, color: Colors.grey)),
                 ),
             ],
           );

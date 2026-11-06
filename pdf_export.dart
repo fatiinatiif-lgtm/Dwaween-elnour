@@ -4,6 +4,7 @@ import 'dart:ui' as ui;
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:pdf/pdf.dart' show PdfPageFormat;
 import 'package:pdf/widgets.dart' as pw;
 
@@ -1241,4 +1242,376 @@ Future<void> _exportPdf(BuildContext context, Poem poem, String diwan,
   } catch (_) {
     toast('تعذّر حفظ الملف');
   }
+}
+
+
+// ════════════════════════════════════════════════
+// بيت واحد كصورة (بنفس تصميم الـ PDF)
+// ════════════════════════════════════════════════
+
+Future<Uint8List> buildVerseImage({
+  required BuildContext context,
+  required String title,
+  required String sadr,
+  required String ajz,
+  required PdfTheme theme,
+  required Color textColor,
+  required Color paper,
+  int frame = 0,
+  int pattern = 0,
+}) async {
+  final baseStyle = (Theme.of(context).textTheme.bodyMedium ?? const TextStyle())
+      .copyWith(decoration: TextDecoration.none);
+
+  TextStyle styleFor(double s) => withPoemFont(baseStyle.merge(TextStyle(
+        fontSize: s,
+        height: 1.0,
+        color: textColor,
+        fontWeight: poemFontWeight,
+      )));
+
+  double indentOf(TextStyle st) =>
+      measureText('ا        ا', st) - measureText('اا', st);
+
+  final texts = [displayText(sadr), displayText(ajz)]
+      .map((t) => t.trim().replaceAll(RegExp(r'\s+'), ' '))
+      .toList();
+
+  var size = 26.0;
+  var st = styleFor(size);
+  var w = _avail - indentOf(st);
+  for (var i = 0; i < 6; i++) {
+    final maxW = texts.map((t) => measureText(t, st)).reduce(math.max);
+    if (maxW <= w) break;
+    size = math.max(12, size * (w / maxW) * 0.995);
+    st = styleFor(size);
+    w = _avail - indentOf(st);
+  }
+  final style = st;
+  final hw = w;
+
+  TextPainter hemistich(Justified j) => TextPainter(
+        text: TextSpan(
+          text: j.text,
+          style: style.copyWith(
+              wordSpacing: j.wordSpacing, height: j.fits ? 1.0 : 1.7),
+        ),
+        textDirection: TextDirection.rtl,
+        textAlign: TextAlign.right,
+        textScaler: TextScaler.noScaling,
+      )..layout(minWidth: hw, maxWidth: j.fits ? hw + 2 : hw);
+
+  TextPainter centered(String text, TextStyle s, double width) => TextPainter(
+        text: TextSpan(text: text, style: s),
+        textDirection: TextDirection.rtl,
+        textAlign: TextAlign.center,
+        textScaler: TextScaler.noScaling,
+      )..layout(minWidth: width, maxWidth: width);
+
+  final sp = hemistich(justifyHemistich(texts[0], style, hw));
+  final aj = hemistich(justifyHemistich(texts[1], style, hw));
+  final titleP = centered(
+      title,
+      baseStyle.merge(TextStyle(
+          color: theme.dark,
+          fontSize: 17,
+          height: 1.5,
+          fontWeight: FontWeight.bold)),
+      _avail - 20);
+  final f1 = centered(
+      'كلمات شاعر رسول الله ﷺ',
+      baseStyle.merge(TextStyle(
+          color: theme.dark, fontSize: 14, fontWeight: FontWeight.bold)),
+      _avail);
+  final f2 = centered(
+      'عبدالرحمن مصطفى الأزهري',
+      baseStyle.merge(TextStyle(
+          color: Color.lerp(theme.accent, Colors.black, .3),
+          fontSize: 13,
+          fontWeight: FontWeight.w600)),
+      _avail);
+
+  final gapV = size * .45;
+  final contentH = 24 + 12 + titleP.height + 12 + 16 + 28 + sp.height + gapV +
+      aj.height + 28 + 16 + 12 + f1.height + 4 + f2.height;
+  var y = math.max(70.0, (_pageH - contentH) / 2);
+
+  final rec = ui.PictureRecorder();
+  final canvas = Canvas(rec);
+  canvas.scale(_scale);
+  _paintPage(canvas, theme, paper, frame, pattern);
+
+  canvas.drawPath(
+      _pdfStar(Offset(_pageW / 2, y + 12), 12), Paint()..color = theme.accent);
+  y += 24 + 12;
+  titleP.paint(canvas, Offset(_mx + 10, y));
+  y += titleP.height + 12;
+  _divider(canvas, _pageW / 2, y + 8, _avail * .8, theme.accent);
+  y += 16 + 28;
+  sp.paint(canvas, Offset(_mx + _avail - sp.width, y));
+  y += sp.height + gapV;
+  aj.paint(canvas, Offset(_mx, y));
+  y += aj.height + 28;
+  _divider(canvas, _pageW / 2, y + 8, _avail * .5, theme.accent);
+  y += 16 + 12;
+  f1.paint(canvas, Offset(_mx, y));
+  y += f1.height + 4;
+  f2.paint(canvas, Offset(_mx, y));
+
+  final pic = rec.endRecording();
+  final img = await pic.toImage(
+      (_pageW * _scale).round(), (_pageH * _scale).round());
+  final bd = await img.toByteData(format: ui.ImageByteFormat.png);
+  img.dispose();
+  pic.dispose();
+  return bd!.buffer.asUint8List();
+}
+
+/// نسخ البيت كنص مع اسم القصيدة
+Future<void> copyVerseText(BuildContext context, Poem poem, Verse v) async {
+  final text = '${displayText(v.sadr).trim()}\n${displayText(v.ajz).trim()}\n'
+      '— ${poem.title}\nكلمات شاعر رسول الله ﷺ / عبدالرحمن مصطفى الأزهري';
+  await Clipboard.setData(ClipboardData(text: text));
+  if (!context.mounted) return;
+  ScaffoldMessenger.of(context)
+    ..hideCurrentSnackBar()
+    ..showSnackBar(const SnackBar(
+      content: Text('تم نسخ البيت', textAlign: TextAlign.center),
+      duration: Duration(seconds: 2),
+    ));
+}
+
+/// نافذة تصميم صورة البيت (معاينة حيّة) ثم الحفظ
+Future<void> showVerseImageSheet(
+    BuildContext context, String diwan, Poem poem, Verse verse) async {
+  final messenger = ScaffoldMessenger.of(context);
+  var themeI = 0;
+  var paperI = 0;
+  var frameI = 0;
+  var patI = 0;
+  var textI = colorChoices.indexWhere((c) => c.color == poemFontColor.value);
+  if (textI < 0) textI = 0;
+  Future<Uint8List>? fut;
+
+  Widget swatch(Color fill, Color? border, bool selected, VoidCallback onTap) =>
+      GestureDetector(
+        onTap: onTap,
+        child: Container(
+          width: 40,
+          height: 40,
+          margin: const EdgeInsets.only(left: 8),
+          padding: const EdgeInsets.all(3),
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            border: Border.all(
+                color: selected ? brown : Colors.black26,
+                width: selected ? 3 : 1),
+          ),
+          child: Container(
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: fill,
+              border: border == null ? null : Border.all(color: border, width: 3),
+            ),
+          ),
+        ),
+      );
+
+  Widget title(String t) => Padding(
+        padding: const EdgeInsets.only(top: 12, bottom: 8),
+        child: Text(t,
+            style: TextStyle(
+                fontSize: 14.5, fontWeight: FontWeight.bold, color: brown)),
+      );
+
+  await showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: cream,
+    builder: (ctx) => StatefulBuilder(
+      builder: (ctx, setS) {
+        Future<Uint8List> make() => buildVerseImage(
+              context: ctx,
+              title: poem.title,
+              sadr: verse.sadr,
+              ajz: verse.ajz,
+              theme: pdfThemes[themeI],
+              textColor: colorChoices[textI].color,
+              paper: paperChoices[paperI].color,
+              frame: frameI,
+              pattern: patI,
+            );
+        fut ??= make();
+        void change(VoidCallback f) => setS(() {
+              f();
+              fut = make();
+            });
+
+        Widget chips(List<String> labels, int sel, void Function(int) pick) =>
+            Wrap(spacing: 8, runSpacing: 6, children: [
+              for (var i = 0; i < labels.length; i++)
+                ChoiceChip(
+                  label: Text(labels[i],
+                      style: TextStyle(
+                          fontSize: 13,
+                          fontWeight:
+                              sel == i ? FontWeight.bold : FontWeight.normal,
+                          color: sel == i ? Colors.white : brownDark)),
+                  selected: sel == i,
+                  showCheckmark: false,
+                  selectedColor: brown,
+                  backgroundColor: Colors.white,
+                  onSelected: (_) => change(() => pick(i)),
+                ),
+            ]);
+
+        return SafeArea(
+          child: SizedBox(
+            height: MediaQuery.of(ctx).size.height * .92,
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 14, 20, 8),
+                  child: Align(
+                    alignment: AlignmentDirectional.centerStart,
+                    child: Text('حفظ البيت كصورة',
+                        style: TextStyle(
+                            fontSize: 19,
+                            fontWeight: FontWeight.bold,
+                            color: brown)),
+                  ),
+                ),
+                SizedBox(
+                  height: 300,
+                  child: Center(
+                    child: AspectRatio(
+                      aspectRatio: _pageW / _pageH,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(boxShadow: [
+                          BoxShadow(
+                              color: Colors.black.withOpacity(.25),
+                              blurRadius: 8,
+                              offset: const Offset(0, 3)),
+                        ]),
+                        child: FutureBuilder<Uint8List>(
+                          future: fut,
+                          builder: (_, snap) => snap.hasData
+                              ? Image.memory(snap.data!,
+                                  fit: BoxFit.fill, gaplessPlayback: true)
+                              : const Center(
+                                  child: CircularProgressIndicator()),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        title('لون الإطار والزخرفة'),
+                        SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: Row(children: [
+                            for (var i = 0; i < pdfThemes.length; i++)
+                              swatch(pdfThemes[i].dark, pdfThemes[i].accent,
+                                  themeI == i, () => change(() => themeI = i)),
+                          ]),
+                        ),
+                        title('لون الورقة'),
+                        SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: Row(children: [
+                            for (var i = 0; i < paperChoices.length; i++)
+                              swatch(paperChoices[i].color, Colors.black12,
+                                  paperI == i, () => change(() => paperI = i)),
+                          ]),
+                        ),
+                        title('لون الخط'),
+                        SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: Row(children: [
+                            for (var i = 0; i < colorChoices.length; i++)
+                              swatch(colorChoices[i].color, null, textI == i,
+                                  () => change(() => textI = i)),
+                          ]),
+                        ),
+                        title('شكل الإطار'),
+                        chips(frameLabels, frameI, (i) => frameI = i),
+                        title('نقوش الخلفية'),
+                        chips(patternLabels, patI, (i) => patI = i),
+                      ],
+                    ),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 4, 20, 14),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        flex: 3,
+                        child: FilledButton.icon(
+                          style: FilledButton.styleFrom(
+                              backgroundColor: brown,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 14)),
+                          onPressed: () async {
+                            final bytes = await fut!;
+                            if (ctx.mounted) Navigator.pop(ctx);
+                            final name = poem.title
+                                .replaceAll(RegExp(r'[\\/:*?"<>|\n\r]'), ' ')
+                                .replaceAll(RegExp(r'\s+'), ' ')
+                                .trim();
+                            void toast(String m) => messenger
+                              ..hideCurrentSnackBar()
+                              ..showSnackBar(SnackBar(
+                                  content: Text(m, textAlign: TextAlign.center),
+                                  duration: const Duration(seconds: 3)));
+                            try {
+                              final path = await FilePicker.platform.saveFile(
+                                dialogTitle: 'حفظ البيت كصورة',
+                                fileName: '${name.isEmpty ? 'بيت' : name}.png',
+                                bytes: bytes,
+                                type: FileType.custom,
+                                allowedExtensions: ['png'],
+                              );
+                              if (path != null) toast('تم حفظ الصورة');
+                            } catch (_) {
+                              toast('تعذّر حفظ الصورة');
+                            }
+                          },
+                          icon: const Icon(Icons.download_rounded),
+                          label: const Text('حفظ الصورة',
+                              style: TextStyle(
+                                  fontSize: 16, fontWeight: FontWeight.bold)),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        flex: 2,
+                        child: OutlinedButton.icon(
+                          style: OutlinedButton.styleFrom(
+                              foregroundColor: brown,
+                              side: BorderSide(color: brown),
+                              padding: const EdgeInsets.symmetric(vertical: 14)),
+                          onPressed: () async {
+                            Navigator.pop(ctx);
+                            await copyVerseText(context, poem, verse);
+                          },
+                          icon: const Icon(Icons.copy_rounded),
+                          label: const Text('نسخ النص'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    ),
+  );
 }
