@@ -71,6 +71,17 @@ class _SplashScreenState extends State<SplashScreen> {
   int count = 5;
   Timer? timer;
 
+  // خط شاشة البداية (غيّري اسم الخط هنا لأي family من pubspec.yaml)
+  TextStyle _splashStyle() => const TextStyle(
+      fontFamily: 'DecoThuluth',
+      color: Colors.white,
+      fontSize: 84,
+      height: 1.3,
+      fontWeight: FontWeight.w700,
+      shadows: [
+        Shadow(color: Color(0x66000000), blurRadius: 8, offset: Offset(0, 3)),
+      ]);
+
   @override
   void initState() {
     super.initState();
@@ -107,33 +118,20 @@ class _SplashScreenState extends State<SplashScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 24),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
                 child: FittedBox(
                   fit: BoxFit.scaleDown,
-                  child: Text('سيد الشعراء',
-                      style: TextStyle(
-                          fontFamily: 'WinsoftThuluth',
-                          color: Colors.white,
-                          fontSize: 80,
-                          height: 1.3,
-                          fontWeight: FontWeight.w700,
-                          shadows: [
-                            Shadow(
-                                color: Color(0x66000000),
-                                blurRadius: 8,
-                                offset: Offset(0, 3)),
-                          ])),
+                  child: Text('سيد', style: _splashStyle()),
                 ),
               ),
-              const SizedBox(height: 10),
-              const Text('عبدالرحمن مصطفى الأزهري',
-                  style: TextStyle(
-                      fontFamily: 'WinsoftThuluth',
-                      color: Color(0xFFE8D9BC),
-                      fontSize: 26,
-                      height: 1.3,
-                      fontWeight: FontWeight.w700)),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text('الشعراء', style: _splashStyle()),
+                ),
+              ),
               const SizedBox(height: 40),
               Text(arDigits(count),
                   style: const TextStyle(
@@ -1014,12 +1012,12 @@ class _PoemBodyState extends State<PoemBody> {
   bool _allFit = true;
 
   TextStyle _styleFor(BuildContext ctx, double size) =>
-      DefaultTextStyle.of(ctx).style.merge(TextStyle(
+      withPoemFont(DefaultTextStyle.of(ctx).style.merge(TextStyle(
             fontSize: size,
             height: 1.0,
             color: poemFontColor.value,
-            fontWeight: FontWeight.w500,
-          ));
+            fontWeight: poemFontWeight,
+          )));
 
   // عرض 8 مسافات بالخط الحالي
   double _indent(TextStyle st) =>
@@ -1085,7 +1083,7 @@ class _PoemBodyState extends State<PoemBody> {
         builder: (ctx, c) {
           final base = poemFontSize.value;
           final key =
-              '${widget.poem.title}|${c.maxWidth.toStringAsFixed(1)}|$base|${poemFontColor.value}|${removeTashkeel.value}';
+              '${widget.poem.title}|${c.maxWidth.toStringAsFixed(1)}|$base|${poemFontColor.value}|${poemFontWeightIndex.value}|${poemFontFamilyIndex.value}|${removeTashkeel.value}';
           if (key != _key) {
             _compute(ctx, c.maxWidth, base);
             _key = key;
@@ -1393,6 +1391,65 @@ class FontSettingsPage extends StatelessWidget {
         ),
       );
 
+  Future<void> _pickFont(BuildContext context) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFFFFFBF2),
+      builder: (ctx) => SafeArea(
+        child: SizedBox(
+          height: MediaQuery.of(ctx).size.height * .8,
+          child: Column(
+            children: [
+              const Padding(
+                padding: EdgeInsets.all(16),
+                child: Text('نوع الخط',
+                    style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: brown)),
+              ),
+              Expanded(
+                child: ListView.separated(
+                  itemCount: fontChoices.length,
+                  separatorBuilder: (_, __) => const Divider(height: 1),
+                  itemBuilder: (_, i) {
+                    final c = fontChoices[i];
+                    final sel = poemFontFamilyIndex.value == i;
+                    return ListTile(
+                      title: Text(c.label,
+                          style: TextStyle(
+                              fontSize: 12,
+                              color: sel ? brown : Colors.black54,
+                              fontWeight:
+                                  sel ? FontWeight.bold : FontWeight.normal)),
+                      subtitle: Text('بسم الله الرحمن الرحيم',
+                          textDirection: TextDirection.rtl,
+                          style: applyFontChoice(
+                              c,
+                              TextStyle(
+                                  fontSize: 22,
+                                  height: 1.6,
+                                  color: brownDark,
+                                  fontWeight: poemFontWeight))),
+                      trailing: sel
+                          ? const Icon(Icons.check_circle, color: brown)
+                          : null,
+                      onTap: () {
+                        poemFontFamilyIndex.value = i;
+                        Navigator.pop(ctx);
+                      },
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Future<void> _pickColor(BuildContext context) async {
     await showModalBottomSheet<void>(
       context: context,
@@ -1489,6 +1546,20 @@ class FontSettingsPage extends StatelessWidget {
               },
             ),
 
+            // ── نوع الخط ──
+            _title('نوع الخط'),
+            ListenableBuilder(
+              listenable: poemFontFamilyIndex,
+              builder: (_, __) => _optionButton(
+                icon: Icons.font_download_rounded,
+                title: 'اختيار نوع الخط',
+                trailing: Text(
+                    fontChoices[poemFontFamilyIndex.value].label,
+                    style: const TextStyle(fontSize: 13, color: brown)),
+                onTap: () => _pickFont(context),
+              ),
+            ),
+
             // ── لون الخط ──
             _title('لون الخط'),
             ListenableBuilder(
@@ -1500,6 +1571,45 @@ class FontSettingsPage extends StatelessWidget {
                     radius: 11, backgroundColor: poemFontColor.value),
                 onTap: () => _pickColor(context),
               ),
+            ),
+
+            // ── سُمك الخط ──
+            _title('سُمك الخط'),
+            ListenableBuilder(
+              listenable: poemFontWeightIndex,
+              builder: (_, __) {
+                final sel = poemFontWeightIndex.value;
+                return Row(
+                  children: [
+                    for (var i = 0; i < weightChoices.length; i++) ...[
+                      if (i > 0) const SizedBox(width: 10),
+                      Expanded(
+                        child: sel == i
+                            ? FilledButton(
+                                style: FilledButton.styleFrom(
+                                    backgroundColor: brown,
+                                    padding: const EdgeInsets.symmetric(
+                                        vertical: 14)),
+                                onPressed: () {},
+                                child: Text(weightChoices[i].label,
+                                    style: TextStyle(
+                                        fontWeight: weightChoices[i].weight)))
+                            : OutlinedButton(
+                                style: OutlinedButton.styleFrom(
+                                    foregroundColor: brown,
+                                    side: const BorderSide(color: brown),
+                                    padding: const EdgeInsets.symmetric(
+                                        vertical: 14)),
+                                onPressed: () =>
+                                    poemFontWeightIndex.value = i,
+                                child: Text(weightChoices[i].label,
+                                    style: TextStyle(
+                                        fontWeight: weightChoices[i].weight))),
+                      ),
+                    ],
+                  ],
+                );
+              },
             ),
 
             // ── التشكيل ──
@@ -1562,11 +1672,54 @@ final ValueNotifier<double> poemFontSize = ValueNotifier<double>(22);
 final ValueNotifier<Color> poemFontColor =
     ValueNotifier<Color>(const Color(0xFF3E2723));
 
+/// نوع خط القصيدة (فهرس في fontChoices، 0 = الخط الافتراضي)
+final ValueNotifier<int> poemFontFamilyIndex = ValueNotifier<int>(0);
+
+class FontChoice {
+  final String label;
+  final String? family; // اسم family كما في pubspec.yaml (null = الافتراضي)
+  const FontChoice(this.label, [this.family]);
+}
+
+const fontChoices = [
+  FontChoice('الخط الافتراضي'),
+  FontChoice('ثلث ونسوفت', 'WinsoftThuluth'),
+  FontChoice('ثلث ديكوتايب', 'DecoThuluth'),
+  FontChoice('ثلث المشرف', 'Amoshref'),
+  FontChoice('رقعة عارف حبر', 'ArefRuqaa'),
+  FontChoice('جالاكسي', 'AAGalaxy'),
+  FontChoice('توباز ثلاثي الأبعاد', 'Topaz3D'),
+];
+
+/// يطبّق نوع الخط المختار على ستايل
+TextStyle applyFontChoice(FontChoice c, TextStyle s) =>
+    c.family == null ? s : s.copyWith(fontFamily: c.family);
+
+TextStyle withPoemFont(TextStyle s) =>
+    applyFontChoice(fontChoices[poemFontFamilyIndex.value], s);
+
+/// سُمك خط القصيدة (فهرس في weightChoices)
+final ValueNotifier<int> poemFontWeightIndex = ValueNotifier<int>(0);
+
+class WeightChoice {
+  final String label;
+  final FontWeight weight;
+  const WeightChoice(this.label, this.weight);
+}
+
+const weightChoices = [
+  WeightChoice('عادي', FontWeight.w500),
+  WeightChoice('سميك', FontWeight.w700),
+  WeightChoice('سميك جدًا', FontWeight.w900),
+];
+
+FontWeight get poemFontWeight => weightChoices[poemFontWeightIndex.value].weight;
+
 /// true = بدون تشكيل، false = التشكيل كما هو
 final ValueNotifier<bool> removeTashkeel = ValueNotifier<bool>(false);
 
 /// يتغيّر عند تغيّر أي إعداد
-final Listenable poemSettings = Listenable.merge([poemFontSize, poemFontColor, removeTashkeel]);
+final Listenable poemSettings = Listenable.merge([poemFontSize, poemFontColor, poemFontWeightIndex, poemFontFamilyIndex, removeTashkeel]);
 
 const double minPoemFont = 16;
 const double maxPoemFont = 30;
@@ -1610,6 +1763,14 @@ Future<void> loadFontSettings() async {
     if (ci != null && ci >= 0 && ci < colorChoices.length) {
       poemFontColor.value = colorChoices[ci].color;
     }
+    final wi = p.getInt('poemFontWeightIndex');
+    if (wi != null && wi >= 0 && wi < weightChoices.length) {
+      poemFontWeightIndex.value = wi;
+    }
+    final fi = p.getInt('poemFontFamilyIndex');
+    if (fi != null && fi >= 0 && fi < fontChoices.length) {
+      poemFontFamilyIndex.value = fi;
+    }
     removeTashkeel.value = p.getBool('removeTashkeel') ?? false;
 
     poemFontSize.addListener(() => p.setDouble('poemFontSize', poemFontSize.value));
@@ -1617,6 +1778,10 @@ Future<void> loadFontSettings() async {
       final i = colorChoices.indexWhere((c) => c.color == poemFontColor.value);
       if (i >= 0) p.setInt('poemFontColorIndex', i);
     });
+    poemFontFamilyIndex
+        .addListener(() => p.setInt('poemFontFamilyIndex', poemFontFamilyIndex.value));
+    poemFontWeightIndex
+        .addListener(() => p.setInt('poemFontWeightIndex', poemFontWeightIndex.value));
     removeTashkeel
         .addListener(() => p.setBool('removeTashkeel', removeTashkeel.value));
   } catch (_) {
