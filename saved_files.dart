@@ -5,6 +5,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 
 import 'main.dart';
 
@@ -118,6 +119,30 @@ class SavedFiles {
       }
     } catch (_) {
       _toast(m, 'تعذّر فتح الملف');
+    }
+  }
+
+  /// مشاركة الملف (واتساب وغيره): تفتح قائمة المشاركة الخاصة بالموبايل.
+  /// يُنسخ الملف مؤقتًا باسم القصيدة النظيف (بدون الرقم الخفي) قبل المشاركة.
+  static Future<void> share(BuildContext context, SavedFile f) async {
+    final m = ScaffoldMessenger.of(context);
+    try {
+      final tmp = await getTemporaryDirectory();
+      final dir = Directory('${tmp.path}${Platform.pathSeparator}share');
+      if (!await dir.exists()) await dir.create(recursive: true);
+      final clean = _clean(f.title, f.kind == SavedKind.pdf ? 'قصيدة' : 'بيت');
+      final copy = await f.file
+          .copy('${dir.path}${Platform.pathSeparator}$clean.${f.ext}');
+      await Share.shareXFiles(
+        [
+          XFile(copy.path,
+              name: '$clean.${f.ext}',
+              mimeType: f.kind == SavedKind.pdf ? 'application/pdf' : 'image/png')
+        ],
+        text: f.title,
+      );
+    } catch (_) {
+      _toast(m, 'تعذّرت المشاركة');
     }
   }
 
@@ -286,11 +311,21 @@ class _SavedTabState extends State<_SavedTab> {
               style: TextStyle(fontWeight: FontWeight.bold, color: ink)),
           subtitle: Text('${f.dateLabel}  •  ${f.sizeLabel}',
               style: TextStyle(color: inkSoft, fontSize: 12.5)),
-          trailing: PopupMenuButton<String>(
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              IconButton(
+                tooltip: 'مشاركة',
+                icon: Icon(Icons.share_rounded, color: brown),
+                onPressed: () => SavedFiles.share(context, f),
+              ),
+              PopupMenuButton<String>(
             icon: Icon(Icons.more_vert_rounded, color: brown),
             onSelected: (v) async {
               if (v == 'open') {
                 await SavedFiles.open(context, f);
+              } else if (v == 'share') {
+                await SavedFiles.share(context, f);
               } else if (v == 'save') {
                 await SavedFiles.exportCopy(context, f);
               } else if (v == 'del') {
@@ -298,6 +333,13 @@ class _SavedTabState extends State<_SavedTab> {
               }
             },
             itemBuilder: (_) => const [
+              PopupMenuItem(
+                  value: 'share',
+                  child: Row(children: [
+                    Icon(Icons.share_rounded, size: 20),
+                    SizedBox(width: 10),
+                    Text('مشاركة'),
+                  ])),
               PopupMenuItem(
                   value: 'open',
                   child: Row(children: [
@@ -319,6 +361,8 @@ class _SavedTabState extends State<_SavedTab> {
                     SizedBox(width: 10),
                     Text('حذف'),
                   ])),
+            ],
+          ),
             ],
           ),
         ),
@@ -343,6 +387,21 @@ class _SavedTabState extends State<_SavedTab> {
                 cacheWidth: 500,
                 errorBuilder: (_, __, ___) => Center(
                     child: Icon(Icons.broken_image_rounded, color: inkSoft)),
+              ),
+              Positioned(
+                top: 6,
+                right: 6,
+                child: Material(
+                  color: Colors.black45,
+                  shape: const CircleBorder(),
+                  child: IconButton(
+                    tooltip: 'مشاركة',
+                    visualDensity: VisualDensity.compact,
+                    icon: const Icon(Icons.share_rounded,
+                        color: Colors.white, size: 20),
+                    onPressed: () => SavedFiles.share(context, f),
+                  ),
+                ),
               ),
               Positioned(
                 left: 0,
@@ -416,6 +475,11 @@ class _ImageViewer extends StatelessWidget {
           backgroundColor: Colors.black,
           title: Text(f.title, overflow: TextOverflow.ellipsis),
           actions: [
+            IconButton(
+              tooltip: 'مشاركة',
+              icon: const Icon(Icons.share_rounded),
+              onPressed: () => SavedFiles.share(context, f),
+            ),
             IconButton(
               tooltip: 'حفظ نسخة في الموبايل',
               icon: const Icon(Icons.download_rounded),

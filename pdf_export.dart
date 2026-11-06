@@ -2,7 +2,6 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:pdf/pdf.dart' show PdfPageFormat;
@@ -1227,34 +1226,11 @@ Future<void> _exportPdf(BuildContext context, Poem poem, String diwan,
     return;
   }
 
-  final name = poem.title
-      .replaceAll(RegExp(r'[\\/:*?"<>|\n\r]'), ' ')
-      .replaceAll(RegExp(r'\s+'), ' ')
-      .trim();
-  // 1) نسخة داخل التطبيق (تظهر في صفحة "الملفات")
+  // يُحفظ مباشرة داخل التطبيق (قسم "الملفات") باسم القصيدة، بدون أي سؤال
   final inApp = await SavedFiles.save(SavedKind.pdf, poem.title, bytes);
-
-  // 2) نسخة على الموبايل (تختارين المكان)
-  try {
-    final path = await FilePicker.platform.saveFile(
-      dialogTitle: 'حفظ القصيدة كملف PDF',
-      fileName: '${name.isEmpty ? 'قصيدة' : name}.pdf',
-      bytes: bytes,
-      type: FileType.custom,
-      allowedExtensions: ['pdf'],
-    );
-    if (path != null) {
-      toast(inApp != null
-          ? 'تم الحفظ على الموبايل وفي قسم «الملفات»'
-          : 'تم حفظ القصيدة كملف PDF');
-    } else if (inApp != null) {
-      toast('تم الحفظ في قسم «الملفات» بالتطبيق');
-    }
-  } catch (_) {
-    toast(inApp != null
-        ? 'تم الحفظ في قسم «الملفات»، وتعذّر الحفظ على الموبايل'
-        : 'تعذّر حفظ الملف');
-  }
+  toast(inApp != null
+      ? 'تم حفظ القصيدة في قسم «الملفات»'
+      : 'تعذّر حفظ الملف');
 }
 
 
@@ -1604,39 +1580,17 @@ Future<void> showVerseImageSheet(
                           onPressed: () async {
                             final bytes = await fut!;
                             if (ctx.mounted) Navigator.pop(ctx);
-                            final name = poem.title
-                                .replaceAll(RegExp(r'[\\/:*?"<>|\n\r]'), ' ')
-                                .replaceAll(RegExp(r'\s+'), ' ')
-                                .trim();
                             void toast(String m) => messenger
                               ..hideCurrentSnackBar()
                               ..showSnackBar(SnackBar(
                                   content: Text(m, textAlign: TextAlign.center),
                                   duration: const Duration(seconds: 3)));
-                            // 1) نسخة داخل التطبيق (تظهر في صفحة "الملفات")
+                            // يُحفظ مباشرة داخل التطبيق (قسم "الملفات") باسم القصيدة، بدون أي سؤال
                             final inApp = await SavedFiles.save(
                                 SavedKind.image, poem.title, bytes);
-                            // 2) نسخة على الموبايل (تختارين المكان)
-                            try {
-                              final path = await FilePicker.platform.saveFile(
-                                dialogTitle: 'حفظ البيت كصورة',
-                                fileName: '${name.isEmpty ? 'بيت' : name}.png',
-                                bytes: bytes,
-                                type: FileType.custom,
-                                allowedExtensions: ['png'],
-                              );
-                              if (path != null) {
-                                toast(inApp != null
-                                    ? 'تم الحفظ على الموبايل وفي قسم «الملفات»'
-                                    : 'تم حفظ الصورة');
-                              } else if (inApp != null) {
-                                toast('تم الحفظ في قسم «الملفات» بالتطبيق');
-                              }
-                            } catch (_) {
-                              toast(inApp != null
-                                  ? 'تم الحفظ في قسم «الملفات»، وتعذّر الحفظ على الموبايل'
-                                  : 'تعذّر حفظ الصورة');
-                            }
+                            toast(inApp != null
+                                ? 'تم حفظ الصورة في قسم «الملفات»'
+                                : 'تعذّر حفظ الصورة');
                           },
                           icon: const Icon(Icons.download_rounded),
                           label: const Text('حفظ الصورة',
