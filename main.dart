@@ -6,6 +6,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'poems_data.dart';
 import 'pdf_export.dart';
+import 'saved_files.dart';
 
 // ملف التطبيق الكامل (ما عدا القصائد: poems_data.dart)
 // الأقسام بالترتيب:
@@ -1090,37 +1091,58 @@ class _DarkModeBar extends StatelessWidget {
                       fontWeight: FontWeight.bold,
                       color: brown)),
             ),
+            // زرار "الملفات": يفتح صفحة الـ PDF والصور المحفوظة
             Material(
               color: cream,
               shape: StadiumBorder(
                   side: BorderSide(color: accentGold.withOpacity(.7))),
               child: InkWell(
                 customBorder: const StadiumBorder(),
-                onTap: () => appDarkMode.value = !dark,
+                onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const SavedFilesPage())),
                 child: Padding(
                   padding:
                       const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      AnimatedSwitcher(
-                        duration: const Duration(milliseconds: 250),
-                        transitionBuilder: (c, a) =>
-                            RotationTransition(turns: a, child: c),
-                        child: Icon(
-                          dark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
-                          key: ValueKey(dark),
-                          color: accentGold,
-                          size: 22,
-                        ),
-                      ),
+                      Icon(Icons.folder_copy_rounded,
+                          color: accentGold, size: 22),
                       const SizedBox(width: 6),
-                      Text(dark ? 'الوضع الفاتح' : 'الوضع الداكن',
+                      Text('الملفات',
                           style: TextStyle(
                               fontSize: 13,
                               fontWeight: FontWeight.w600,
                               color: ink)),
                     ],
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            // زرار الوضع الداكن (أيقونة فقط عشان المكان يكفي)
+            Tooltip(
+              message: dark ? 'الوضع الفاتح' : 'الوضع الداكن',
+              child: Material(
+                color: cream,
+                shape: CircleBorder(
+                    side: BorderSide(color: accentGold.withOpacity(.7))),
+                child: InkWell(
+                  customBorder: const CircleBorder(),
+                  onTap: () => appDarkMode.value = !dark,
+                  child: Padding(
+                    padding: const EdgeInsets.all(8),
+                    child: AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 250),
+                      transitionBuilder: (c, a) =>
+                          RotationTransition(turns: a, child: c),
+                      child: Icon(
+                        dark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
+                        key: ValueKey(dark),
+                        color: accentGold,
+                        size: 22,
+                      ),
+                    ),
                   ),
                 ),
               ),
@@ -2115,50 +2137,90 @@ class PoemPage extends StatelessWidget {
 
   /// اختيار بيت من القصيدة لحفظه كصورة
   void _pickVerse(BuildContext context) {
+    var two = false; // false = بيت واحد، true = بيتان
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       backgroundColor: cream,
-      builder: (ctx) => SafeArea(
-        child: SizedBox(
-          height: MediaQuery.of(ctx).size.height * .75,
-          child: Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.all(16),
-                child: Text('اختاري البيت',
-                    style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: brown)),
-              ),
-              Expanded(
-                child: ListView.separated(
-                  itemCount: poem.verses.length,
-                  separatorBuilder: (_, __) => const Divider(height: 1),
-                  itemBuilder: (_, i) {
-                    final v = poem.verses[i];
-                    return ListTile(
-                      leading: CircleAvatar(
-                        radius: 15,
-                        backgroundColor: brown,
-                        child: Text(arDigits(i + 1),
-                            style: const TextStyle(
-                                color: Colors.white, fontSize: 12)),
-                      ),
-                      title: Text(displayText(v.sadr),
-                          maxLines: 1, overflow: TextOverflow.ellipsis),
-                      subtitle: Text(displayText(v.ajz),
-                          maxLines: 1, overflow: TextOverflow.ellipsis),
-                      onTap: () {
-                        Navigator.pop(ctx);
-                        showVerseImageSheet(context, diwan, poem, v);
-                      },
-                    );
-                  },
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setS) => SafeArea(
+          child: SizedBox(
+            height: MediaQuery.of(ctx).size.height * .75,
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                  child: Text('اختاري البيت',
+                      style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: brown)),
                 ),
-              ),
-            ],
+                Wrap(
+                  spacing: 10,
+                  children: [
+                    for (final opt in const [(false, 'بيت واحد'), (true, 'بيتان')])
+                      ChoiceChip(
+                        label: Text(opt.$2,
+                            style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: two == opt.$1
+                                    ? FontWeight.bold
+                                    : FontWeight.normal,
+                                color: two == opt.$1 ? Colors.white : brownDark)),
+                        selected: two == opt.$1,
+                        showCheckmark: false,
+                        selectedColor: brown,
+                        backgroundColor: Colors.white,
+                        onSelected: (_) => setS(() => two = opt.$1),
+                      ),
+                  ],
+                ),
+                if (two)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                    child: Text('يُحفظ البيت المختار مع البيت الذي يليه',
+                        style: TextStyle(fontSize: 12.5, color: inkSoft)),
+                  ),
+                const SizedBox(height: 6),
+                Expanded(
+                  child: ListView.separated(
+                    itemCount: poem.verses.length,
+                    separatorBuilder: (_, __) => const Divider(height: 1),
+                    itemBuilder: (_, i) {
+                      final v = poem.verses[i];
+                      return ListTile(
+                        leading: CircleAvatar(
+                          radius: 15,
+                          backgroundColor: brown,
+                          child: Text(arDigits(i + 1),
+                              style: const TextStyle(
+                                  color: Colors.white, fontSize: 12)),
+                        ),
+                        title: Text(displayText(v.sadr),
+                            maxLines: 1, overflow: TextOverflow.ellipsis),
+                        subtitle: Text(displayText(v.ajz),
+                            maxLines: 1, overflow: TextOverflow.ellipsis),
+                        onTap: () {
+                          Navigator.pop(ctx);
+                          final vs = poem.verses;
+                          if (!two || vs.length < 2) {
+                            showVerseImageSheet(context, diwan, poem, v);
+                          } else if (i + 1 < vs.length) {
+                            showVerseImageSheet(context, diwan, poem, v,
+                                nextVerse: vs[i + 1]);
+                          } else {
+                            // آخر بيت: نأخذ البيت السابق معه
+                            showVerseImageSheet(context, diwan, poem, vs[i - 1],
+                                nextVerse: v);
+                          }
+                        },
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),

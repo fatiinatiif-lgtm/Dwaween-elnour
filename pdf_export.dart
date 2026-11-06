@@ -10,6 +10,7 @@ import 'package:pdf/widgets.dart' as pw;
 
 import 'main.dart';
 import 'poems_data.dart';
+import 'saved_files.dart';
 
 // ════════════════════════════════════════════════
 // تصدير القصيدة إلى PDF
@@ -1230,6 +1231,10 @@ Future<void> _exportPdf(BuildContext context, Poem poem, String diwan,
       .replaceAll(RegExp(r'[\\/:*?"<>|\n\r]'), ' ')
       .replaceAll(RegExp(r'\s+'), ' ')
       .trim();
+  // 1) نسخة داخل التطبيق (تظهر في صفحة "الملفات")
+  final inApp = await SavedFiles.save(SavedKind.pdf, poem.title, bytes);
+
+  // 2) نسخة على الموبايل (تختارين المكان)
   try {
     final path = await FilePicker.platform.saveFile(
       dialogTitle: 'حفظ القصيدة كملف PDF',
@@ -1238,9 +1243,17 @@ Future<void> _exportPdf(BuildContext context, Poem poem, String diwan,
       type: FileType.custom,
       allowedExtensions: ['pdf'],
     );
-    if (path != null) toast('تم حفظ القصيدة كملف PDF');
+    if (path != null) {
+      toast(inApp != null
+          ? 'تم الحفظ على الموبايل وفي قسم «الملفات»'
+          : 'تم حفظ القصيدة كملف PDF');
+    } else if (inApp != null) {
+      toast('تم الحفظ في قسم «الملفات» بالتطبيق');
+    }
   } catch (_) {
-    toast('تعذّر حفظ الملف');
+    toast(inApp != null
+        ? 'تم الحفظ في قسم «الملفات»، وتعذّر الحفظ على الموبايل'
+        : 'تعذّر حفظ الملف');
   }
 }
 
@@ -1600,6 +1613,10 @@ Future<void> showVerseImageSheet(
                               ..showSnackBar(SnackBar(
                                   content: Text(m, textAlign: TextAlign.center),
                                   duration: const Duration(seconds: 3)));
+                            // 1) نسخة داخل التطبيق (تظهر في صفحة "الملفات")
+                            final inApp = await SavedFiles.save(
+                                SavedKind.image, poem.title, bytes);
+                            // 2) نسخة على الموبايل (تختارين المكان)
                             try {
                               final path = await FilePicker.platform.saveFile(
                                 dialogTitle: 'حفظ البيت كصورة',
@@ -1608,9 +1625,17 @@ Future<void> showVerseImageSheet(
                                 type: FileType.custom,
                                 allowedExtensions: ['png'],
                               );
-                              if (path != null) toast('تم حفظ الصورة');
+                              if (path != null) {
+                                toast(inApp != null
+                                    ? 'تم الحفظ على الموبايل وفي قسم «الملفات»'
+                                    : 'تم حفظ الصورة');
+                              } else if (inApp != null) {
+                                toast('تم الحفظ في قسم «الملفات» بالتطبيق');
+                              }
                             } catch (_) {
-                              toast('تعذّر حفظ الصورة');
+                              toast(inApp != null
+                                  ? 'تم الحفظ في قسم «الملفات»، وتعذّر الحفظ على الموبايل'
+                                  : 'تعذّر حفظ الصورة');
                             }
                           },
                           icon: const Icon(Icons.download_rounded),
