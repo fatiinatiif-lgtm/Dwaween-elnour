@@ -91,6 +91,16 @@ const frameLabels = [
   'شريط عريض', // 10
   'بدون إطار', // 11
   'حلقات متصلة', // 12
+  'مربعات الزوايا', // 13
+  'نقاط دقيقة', // 14
+  'زوايا مقعّرة', // 15
+  'خطوط متدرجة', // 16
+  'أقواس الأركان', // 17
+  'نجوم الأركان', // 18
+  'زوايا مشطوفة', // 19
+  'شريط ذهبي سميك', // 20
+  'دوائر الأركان', // 21
+  'معيّنات ونقاط', // 22
 ];
 const _frameArch = 8;
 const _frameNone = 11;
@@ -112,10 +122,20 @@ const headerLabels = [
   'شريط ملوّن', // 1
   'مستطيل مزخرف', // 2
   'كبسولة', // 3
+  'قوس مدبّب', // 4
+  'داكن منقّط', // 5
+  'مثمّن', // 6
+  'بطن مقوّس', // 7
+  'داكن مقعّر الزوايا', // 8
+  'ظل مزدوج', // 9
+  'خطان وزخرف', // 10
+  'كبسولة داكنة', // 11
+  'شرفات', // 12
+  'جوانب مقعّرة', // 13
 ];
 
 /// الترويسات الملوّنة (نص أبيض) مقابل الفاتحة (نص بلون الثيم)
-bool _headerDark(int h) => h <= 1;
+bool _headerDark(int h) => h <= 1 || h == 5 || h == 8 || h == 11;
 
 // ───────────── مقاسات الصفحة (A4 بالنسبة) ─────────────
 
@@ -380,6 +400,176 @@ RRect _frameClip(int frame) {
   return RRect.fromRectAndRadius(_inset(10), const Radius.circular(10));
 }
 
+/// مستطيل بزوايا مشطوفة (مثمّن)
+Path _chamferPath(Rect r, double c) => Path()
+  ..moveTo(r.left + c, r.top)
+  ..lineTo(r.right - c, r.top)
+  ..lineTo(r.right, r.top + c)
+  ..lineTo(r.right, r.bottom - c)
+  ..lineTo(r.right - c, r.bottom)
+  ..lineTo(r.left + c, r.bottom)
+  ..lineTo(r.left, r.bottom - c)
+  ..lineTo(r.left, r.top + c)
+  ..close();
+
+/// مستطيل بزوايا مقعّرة (على شكل تذكرة)
+Path _ticketPath(Rect r, double rad) => Path()
+  ..moveTo(r.left + rad, r.top)
+  ..lineTo(r.right - rad, r.top)
+  ..arcToPoint(Offset(r.right, r.top + rad),
+      radius: Radius.circular(rad), clockwise: false)
+  ..lineTo(r.right, r.bottom - rad)
+  ..arcToPoint(Offset(r.right - rad, r.bottom),
+      radius: Radius.circular(rad), clockwise: false)
+  ..lineTo(r.left + rad, r.bottom)
+  ..arcToPoint(Offset(r.left, r.bottom - rad),
+      radius: Radius.circular(rad), clockwise: false)
+  ..lineTo(r.left, r.top + rad)
+  ..arcToPoint(Offset(r.left + rad, r.top),
+      radius: Radius.circular(rad), clockwise: false)
+  ..close();
+
+/// الترويسات الإضافية (الأرقام 4 إلى 13)
+void _paintHeaderExtra(Canvas canvas, PdfTheme t, int style, Rect rect) {
+  final darker = Color.lerp(t.dark, Colors.black, .35)!;
+  Paint grad() => Paint()
+    ..shader = ui.Gradient.linear(
+        rect.topCenter, rect.bottomCenter, [t.dark, darker]);
+  switch (style) {
+    case 4: // قوس مدبّب
+      {
+        final shoulder = rect.top + 40;
+        final p = Path()
+          ..moveTo(rect.left, rect.bottom)
+          ..lineTo(rect.left, shoulder)
+          ..quadraticBezierTo(
+              rect.left, rect.top + 14, rect.center.dx, rect.top)
+          ..quadraticBezierTo(
+              rect.right, rect.top + 14, rect.right, shoulder)
+          ..lineTo(rect.right, rect.bottom)
+          ..close();
+        canvas.drawPath(p, _fillP(t.accent.withOpacity(.13)));
+        canvas.drawPath(p, _stroke(t.accent, 2.2));
+      }
+    case 5: // داكن منقّط
+      {
+        final rr = RRect.fromRectAndRadius(rect, const Radius.circular(12));
+        canvas.drawRRect(rr, grad());
+        canvas.drawRRect(rr, _stroke(t.accent, 2));
+        for (final pt in _pointsAlongRect(rect.deflate(8), 14)) {
+          canvas.drawCircle(pt, 1.7, _fillP(t.accent.withOpacity(.9)));
+        }
+      }
+    case 6: // مثمّن
+      {
+        final p = _chamferPath(rect, 24);
+        canvas.drawPath(p, _fillP(t.accent.withOpacity(.14)));
+        canvas.drawPath(p, _stroke(t.accent, 2.2));
+        canvas.drawPath(_chamferPath(rect.deflate(6), 19),
+            _stroke(t.dark.withOpacity(.6), .9));
+      }
+    case 7: // بطن مقوّس
+      {
+        final p = Path()
+          ..moveTo(rect.left, rect.top)
+          ..lineTo(rect.right, rect.top)
+          ..lineTo(rect.right, rect.bottom - 12)
+          ..quadraticBezierTo(
+              rect.center.dx, rect.bottom + 14, rect.left, rect.bottom - 12)
+          ..close();
+        canvas.drawPath(p, _fillP(t.accent.withOpacity(.13)));
+        canvas.drawPath(p, _stroke(t.accent, 2));
+        canvas.drawLine(rect.topLeft, rect.topRight, _stroke(t.dark, 4));
+      }
+    case 8: // داكن مقعّر الزوايا
+      {
+        final p = _ticketPath(rect, 16);
+        canvas.drawPath(p, grad());
+        canvas.drawPath(p, _stroke(t.accent, 2));
+        canvas.drawPath(_ticketPath(rect.deflate(7), 10),
+            _stroke(t.accent.withOpacity(.6), .8));
+      }
+    case 9: // ظل مزدوج
+      {
+        final rr = RRect.fromRectAndRadius(rect, const Radius.circular(14));
+        final shadow = Path.combine(
+            PathOperation.difference,
+            Path()..addRRect(rr.shift(const Offset(4, 4))),
+            Path()..addRRect(rr));
+        canvas.drawPath(shadow, _fillP(t.accent.withOpacity(.4)));
+        canvas.drawRRect(rr, _stroke(t.accent, 2));
+        canvas.drawRRect(
+            rr.deflate(5), _stroke(t.dark.withOpacity(.55), .8));
+      }
+    case 10: // خطان وزخرف
+      {
+        final y1 = rect.top + 4;
+        final y2 = rect.bottom - 4;
+        for (final y in [y1, y2]) {
+          final inner = y == y1 ? y + 5 : y - 5;
+          canvas.drawLine(
+              Offset(rect.left, y), Offset(rect.right, y), _stroke(t.accent, 2.2));
+          canvas.drawLine(Offset(rect.left + 10, inner),
+              Offset(rect.right - 10, inner), _stroke(t.dark.withOpacity(.6), .8));
+          _diamondMark(canvas, Offset(rect.center.dx, y), 6, t);
+          _diamondMark(canvas, Offset(rect.left, y), 5, t);
+          _diamondMark(canvas, Offset(rect.right, y), 5, t);
+        }
+      }
+    case 11: // كبسولة داكنة
+      {
+        final rr = RRect.fromRectAndRadius(rect, const Radius.circular(46));
+        canvas.drawRRect(rr, grad());
+        canvas.drawRRect(rr, _stroke(t.accent, 2));
+        canvas.drawRRect(
+            rr.deflate(6), _stroke(t.accent.withOpacity(.6), .8));
+      }
+    case 12: // شرفات
+      {
+        const n = 9;
+        const mh = 10.0;
+        final step = rect.width / n;
+        final p = Path()..moveTo(rect.left, rect.bottom);
+        for (var i = 0; i < n; i++) {
+          final x0 = rect.left + i * step;
+          final y = i.isEven ? rect.top : rect.top + mh;
+          p.lineTo(x0, y);
+          p.lineTo(x0 + step, y);
+        }
+        p
+          ..lineTo(rect.right, rect.bottom)
+          ..close();
+        canvas.drawPath(p, _fillP(t.accent.withOpacity(.13)));
+        canvas.drawPath(p, _stroke(t.accent, 2));
+      }
+    case 13: // جوانب مقعّرة
+      {
+        const b = 14.0;
+        final p = Path()
+          ..moveTo(rect.left, rect.top)
+          ..lineTo(rect.right, rect.top)
+          ..quadraticBezierTo(
+              rect.right - b * 2, rect.center.dy, rect.right, rect.bottom)
+          ..lineTo(rect.left, rect.bottom)
+          ..quadraticBezierTo(
+              rect.left + b * 2, rect.center.dy, rect.left, rect.top)
+          ..close();
+        canvas.drawPath(p, _fillP(t.accent.withOpacity(.12)));
+        canvas.drawPath(p, _stroke(t.accent, 2));
+        for (final c in [
+          rect.topLeft,
+          rect.topRight,
+          rect.bottomLeft,
+          rect.bottomRight
+        ]) {
+          _diamondMark(canvas, c, 5, t);
+        }
+      }
+    default:
+      break;
+  }
+}
+
 void _paintFrame(Canvas canvas, PdfTheme t, int frame) {
   switch (frame) {
     case 0:
@@ -610,6 +800,163 @@ void _paintFrame(Canvas canvas, PdfTheme t, int frame) {
           _medallion(canvas, c, 10, t);
         }
       }
+    case 13:
+      {
+        canvas.drawRect(_inset(12), _stroke(t.accent, 2));
+        canvas.drawRect(_inset(18), _stroke(t.dark.withOpacity(.75), 1));
+        for (final c in [
+          Offset(12, 12),
+          Offset(_pageW - 12, 12),
+          Offset(12, _pageH - 12),
+          Offset(_pageW - 12, _pageH - 12),
+        ]) {
+          final sq = Rect.fromCenter(center: c, width: 16, height: 16);
+          canvas.drawRect(sq, _fillP(t.accent));
+          canvas.drawRect(sq, _stroke(t.dark, 1.2));
+          canvas.drawRect(Rect.fromCenter(center: c, width: 6, height: 6),
+              _fillP(t.dark));
+        }
+      }
+    case 14:
+      {
+        canvas.drawRRect(
+            RRect.fromRectAndRadius(_inset(10), const Radius.circular(8)),
+            _stroke(t.accent, 1.2));
+        for (final p in _pointsAlongRect(_inset(16), 7)) {
+          canvas.drawCircle(p, 1.4, _fillP(t.accent));
+        }
+        canvas.drawRRect(
+            RRect.fromRectAndRadius(_inset(22), const Radius.circular(4)),
+            _stroke(t.dark.withOpacity(.6), .8));
+      }
+    case 15:
+      {
+        canvas.drawPath(_ticketPath(_inset(10), 24), _stroke(t.accent, 2.2));
+        canvas.drawPath(_ticketPath(_inset(18), 14),
+            _stroke(t.dark.withOpacity(.8), 1));
+      }
+    case 16:
+      {
+        canvas.drawRect(_inset(9), _stroke(t.accent, 3));
+        canvas.drawRect(_inset(15), _stroke(t.dark.withOpacity(.85), 1));
+        canvas.drawRect(_inset(19), _stroke(t.accent, 1.2));
+        canvas.drawRect(_inset(23), _stroke(t.accent.withOpacity(.5), .6));
+      }
+    case 17:
+      {
+        final r = _inset(14);
+        canvas.drawRect(r, _stroke(t.accent.withOpacity(.35), 1));
+        const len = 46.0;
+        final p = Path()
+          ..moveTo(r.left, r.top + len)
+          ..lineTo(r.left, r.top)
+          ..lineTo(r.left + len, r.top)
+          ..moveTo(r.right - len, r.top)
+          ..lineTo(r.right, r.top)
+          ..lineTo(r.right, r.top + len)
+          ..moveTo(r.right, r.bottom - len)
+          ..lineTo(r.right, r.bottom)
+          ..lineTo(r.right - len, r.bottom)
+          ..moveTo(r.left + len, r.bottom)
+          ..lineTo(r.left, r.bottom)
+          ..lineTo(r.left, r.bottom - len);
+        canvas.drawPath(p, _stroke(t.accent, 3.2));
+        for (final c in [r.topLeft, r.topRight, r.bottomLeft, r.bottomRight]) {
+          canvas.drawCircle(c, 4, _fillP(t.dark));
+        }
+      }
+    case 18:
+      {
+        canvas.drawRRect(
+            RRect.fromRectAndRadius(_inset(12), const Radius.circular(6)),
+            _stroke(t.accent, 1.8));
+        canvas.drawRRect(
+            RRect.fromRectAndRadius(_inset(20), const Radius.circular(3)),
+            _stroke(t.dark.withOpacity(.7), 1));
+        for (final c in [
+          Offset(14, 14),
+          Offset(_pageW - 14, 14),
+          Offset(14, _pageH - 14),
+          Offset(_pageW - 14, _pageH - 14),
+        ]) {
+          canvas.drawPath(_pdfStar(c, 13), _fillP(t.accent));
+          canvas.drawPath(_pdfStar(c, 13), _stroke(t.dark, 1));
+        }
+        for (final c in [
+          Offset(_pageW / 2, 12),
+          Offset(_pageW / 2, _pageH - 12),
+          Offset(12, _pageH / 2),
+          Offset(_pageW - 12, _pageH / 2),
+        ]) {
+          canvas.drawPath(_pdfStar(c, 6, .5), _fillP(t.dark));
+        }
+      }
+    case 19:
+      {
+        canvas.drawPath(_chamferPath(_inset(10), 24), _stroke(t.accent, 2.2));
+        canvas.drawPath(_chamferPath(_inset(17), 17),
+            _stroke(t.dark.withOpacity(.8), 1.1));
+        for (final c in [
+          Offset(22, 22),
+          Offset(_pageW - 22, 22),
+          Offset(22, _pageH - 22),
+          Offset(_pageW - 22, _pageH - 22),
+        ]) {
+          _diamondMark(canvas, c, 6, t);
+        }
+      }
+    case 20:
+      {
+        canvas.drawRRect(
+            RRect.fromRectAndRadius(_inset(12), const Radius.circular(6)),
+            _stroke(t.accent, 7));
+        canvas.drawRRect(
+            RRect.fromRectAndRadius(_inset(7), const Radius.circular(9)),
+            _stroke(t.dark.withOpacity(.85), 1));
+        canvas.drawRRect(
+            RRect.fromRectAndRadius(_inset(17), const Radius.circular(3)),
+            _stroke(t.dark.withOpacity(.85), 1));
+      }
+    case 21:
+      {
+        canvas.drawRect(_inset(20), _stroke(t.accent, 1.6));
+        for (final c in [
+          Offset(20, 20),
+          Offset(_pageW - 20, 20),
+          Offset(20, _pageH - 20),
+          Offset(_pageW - 20, _pageH - 20),
+        ]) {
+          canvas.drawCircle(c, 15, _stroke(t.accent, 1.8));
+          canvas.drawCircle(c, 10.5, _stroke(t.dark.withOpacity(.8), 1));
+          _medallion(canvas, c, 6, t);
+        }
+        for (final c in [
+          Offset(_pageW / 2, 20),
+          Offset(_pageW / 2, _pageH - 20),
+          Offset(20, _pageH / 2),
+          Offset(_pageW - 20, _pageH / 2),
+        ]) {
+          canvas.drawCircle(c, 4, _fillP(t.accent));
+        }
+      }
+    case 22:
+      {
+        canvas.drawRRect(
+            RRect.fromRectAndRadius(_inset(11), const Radius.circular(5)),
+            _stroke(t.accent, 1.3));
+        canvas.drawRRect(
+            RRect.fromRectAndRadius(_inset(25), const Radius.circular(3)),
+            _stroke(t.dark.withOpacity(.7), .9));
+        var k = 0;
+        for (final p in _pointsAlongRect(_inset(18), 16)) {
+          if (k.isEven) {
+            _diamondMark(canvas, p, 4, t);
+          } else {
+            canvas.drawCircle(p, 1.8, _fillP(t.accent));
+          }
+          k++;
+        }
+      }
     default:
       break; // بدون إطار
   }
@@ -632,6 +979,10 @@ void _paintPage(
 void _paintHeader(Canvas canvas, PdfTheme t, int style, double top, double h,
     TextPainter title, TextPainter diwan) {
   final rect = Rect.fromLTWH(_mx, top, _avail, h);
+  final filled = _headerDark(style);
+  if (style >= 4) {
+    _paintHeaderExtra(canvas, t, style, rect);
+  } else {
   final rr = switch (style) {
     1 => RRect.fromRectAndRadius(rect, const Radius.circular(18)),
     2 => RRect.fromRectAndRadius(rect, const Radius.circular(6)),
@@ -644,7 +995,6 @@ void _paintHeader(Canvas canvas, PdfTheme t, int style, double top, double h,
         bottomRight: const Radius.circular(14),
       ),
   };
-  final filled = _headerDark(style);
   if (filled) {
     final darker = Color.lerp(t.dark, Colors.black, .35)!;
     canvas.drawRRect(
@@ -663,6 +1013,7 @@ void _paintHeader(Canvas canvas, PdfTheme t, int style, double top, double h,
     canvas.drawRRect(rr.deflate(5), _stroke(t.dark.withOpacity(.7), .9));
   } else if (style == 3) {
     canvas.drawRRect(rr.deflate(6), _stroke(t.dark.withOpacity(.55), .9));
+  }
   }
 
   var y = top + 30;

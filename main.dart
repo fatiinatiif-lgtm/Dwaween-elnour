@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -262,6 +263,7 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await loadFontSettings();
   await loadFavorites();
+  await notesStore.load();
   await loadAppTheme();
   runApp(const DiwanApp());
 }
@@ -2067,6 +2069,7 @@ class FavoritesPage extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(16, 18, 16, 24),
               children: [
                 const SectionHeading('المفضلة'),
+                const _NotesEntryCard(),
                 if (items.isEmpty)
                   const _EmptyFavorites()
                 else
@@ -2113,6 +2116,856 @@ class _EmptyFavorites extends StatelessWidget {
           ],
         ),
       );
+}
+
+// ───────────── ملحوظاتي ─────────────
+
+/// عنصر في ملحوظاتي: قسم (folder) أو نص (text) أو قصيدة (poem)
+class NoteNode {
+  String id;
+  String kind; // 'folder' | 'text' | 'poem'
+  String title;
+  String body;
+  String diwan;
+  String poemTitle;
+  int color; // 0 = بدون لون، وإلا قيمة اللون
+  List<NoteNode> children;
+
+  NoteNode({
+    required this.id,
+    required this.kind,
+    this.title = '',
+    this.body = '',
+    this.diwan = '',
+    this.poemTitle = '',
+    this.color = 0,
+    List<NoteNode>? children,
+  }) : children = children ?? <NoteNode>[];
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'k': kind,
+        't': title,
+        'b': body,
+        'd': diwan,
+        'p': poemTitle,
+        if (color != 0) 'col': color,
+        if (children.isNotEmpty) 'c': children.map((e) => e.toJson()).toList(),
+      };
+
+  factory NoteNode.fromJson(Map<String, dynamic> j) => NoteNode(
+        id: (j['id'] as String?) ?? '',
+        kind: (j['k'] as String?) ?? 'text',
+        title: (j['t'] as String?) ?? '',
+        body: (j['b'] as String?) ?? '',
+        diwan: (j['d'] as String?) ?? '',
+        poemTitle: (j['p'] as String?) ?? '',
+        color: (j['col'] as int?) ?? 0,
+        children: [
+          for (final c in ((j['c'] as List?) ?? const []))
+            NoteNode.fromJson(Map<String, dynamic>.from(c as Map)),
+        ],
+      );
+}
+
+/// مخزن الملحوظات (يُحفظ تلقائيًا في الجهاز)
+class NotesStore extends ChangeNotifier {
+  NoteNode root = NoteNode(id: 'root', kind: 'folder', title: 'ملحوظاتي');
+  SharedPreferences? _prefs;
+
+  Future<void> load() async {
+    try {
+      _prefs = await SharedPreferences.getInstance();
+      final raw = _prefs!.getString('notes_v1');
+      if (raw != null && raw.isNotEmpty) {
+        root = NoteNode.fromJson(
+            Map<String, dynamic>.from(jsonDecode(raw) as Map));
+        root.id = 'root';
+        root.kind = 'folder';
+        root.title = 'ملحوظاتي';
+      }
+    } catch (_) {
+      // لو فشل التحميل تبدأ الملحوظات فارغة
+    }
+  }
+
+  /// حفظ بدون إشعار (يُستخدم أثناء الكتابة)
+  void saveOnly() {
+    try {
+      _prefs?.setString('notes_v1', jsonEncode(root.toJson()));
+    } catch (_) {}
+  }
+
+  /// حفظ مع تحديث الشاشات
+  void changed() {
+    notifyListeners();
+    saveOnly();
+  }
+
+  String newId() => DateTime.now().microsecondsSinceEpoch.toString();
+
+  int countAll(NoteNode n) {
+    var c = n.children.length;
+    for (final ch in n.children) {
+      c += countAll(ch);
+    }
+    return c;
+  }
+}
+
+final NotesStore notesStore = NotesStore();
+
+Future<String?> _askName(BuildContext context, String title,
+    {String initial = '', String hint = ''}) {
+  final c = TextEditingController(text: initial);
+  return showDialog<String>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: Text(title),
+      content: TextField(
+        controller: c,
+        autofocus: true,
+        decoration: InputDecoration(hintText: hint),
+        onSubmitted: (v) => Navigator.pop(ctx, v.trim()),
+      ),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
+        TextButton(
+            onPressed: () => Navigator.pop(ctx, c.text.trim()),
+            child: const Text('حفظ')),
+      ],
+    ),
+  );
+}
+
+Future<bool> _confirmDelete(BuildContext context, String msg) async {
+  final r = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: const Text('حذف'),
+      content: Text(msg),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('إلغاء')),
+        TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('حذف',
+                style: TextStyle(color: Color(0xFFC62828)))),
+      ],
+    ),
+  );
+  return r ?? false;
+}
+
+const List<Color> _noteColors = [
+  Color(0xFFC62828),
+  Color(0xFFEF6C00),
+  Color(0xFFF9A825),
+  Color(0xFF2E7D32),
+  Color(0xFF00838F),
+  Color(0xFF1565C0),
+  Color(0xFF6A1B9A),
+  Color(0xFFAD1457),
+  Color(0xFF5D4037),
+  Color(0xFF546E7A),
+];
+
+/// يعرض ألوانًا للاختيار. يرجع قيمة اللون، أو 0 لإزالة اللون، أو null عند الإغلاق
+Future<int?> _pickNoteColor(BuildContext context, int current) {
+  return showModalBottomSheet<int>(
+    context: context,
+    backgroundColor: cream,
+    builder: (ctx) => SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 18, 20, 22),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('اختاري اللون',
+                style: TextStyle(
+                    fontSize: 17, fontWeight: FontWeight.bold, color: brown)),
+            const SizedBox(height: 16),
+            Wrap(
+              alignment: WrapAlignment.center,
+              spacing: 14,
+              runSpacing: 14,
+              children: [
+                GestureDetector(
+                  onTap: () => Navigator.pop(ctx, 0),
+                  child: Container(
+                    width: 46,
+                    height: 46,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: cream,
+                      border: Border.all(
+                          color: current == 0 ? brown : inkSoft,
+                          width: current == 0 ? 3 : 1.4),
+                    ),
+                    child: Icon(Icons.format_color_reset_rounded,
+                        color: inkSoft, size: 24),
+                  ),
+                ),
+                for (final c in _noteColors)
+                  GestureDetector(
+                    onTap: () => Navigator.pop(ctx, c.value),
+                    child: Container(
+                      width: 46,
+                      height: 46,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: c,
+                        border: Border.all(
+                            color: current == c.value ? brown : Colors.white,
+                            width: current == c.value ? 3 : 1.6),
+                      ),
+                      child: current == c.value
+                          ? const Icon(Icons.check_rounded,
+                              color: Colors.white, size: 26)
+                          : null,
+                    ),
+                  ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+InputDecoration _noteDecoration(String hint) => InputDecoration(
+      hintText: hint,
+      hintStyle: TextStyle(color: inkSoft, fontSize: 14),
+      filled: true,
+      fillColor: cream,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(16),
+        borderSide: BorderSide(color: accentGold.withOpacity(.6)),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(16),
+        borderSide: BorderSide(color: brown, width: 1.6),
+      ),
+    );
+
+void _openNotePoem(BuildContext context, NoteNode n) {
+  final list = poems[n.diwan];
+  final i = list == null ? -1 : list.indexWhere((p) => p.title == n.poemTitle);
+  if (list == null || i < 0) {
+    ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('تعذّر العثور على القصيدة')));
+    return;
+  }
+  Navigator.push(
+      context,
+      MaterialPageRoute(
+          builder: (_) => PoemPage(poem: list[i], diwan: n.diwan)));
+}
+
+/// بطاقة «ملحوظاتي» في أعلى صفحة المفضلة
+class _NotesEntryCard extends StatelessWidget {
+  const _NotesEntryCard();
+  @override
+  Widget build(BuildContext context) => AnimatedBuilder(
+        animation: notesStore,
+        builder: (context, _) {
+          final count = notesStore.countAll(notesStore.root);
+          return Container(
+            margin: const EdgeInsets.only(bottom: 18),
+            decoration: BoxDecoration(
+              color: cream,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: accentGold.withOpacity(.6)),
+              boxShadow: _softShadow(.08),
+            ),
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(20),
+                onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) => NotesPage(folder: notesStore.root))),
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 50,
+                        height: 50,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: accentGold.withOpacity(.16),
+                          border: Border.all(color: accentGold.withOpacity(.6)),
+                        ),
+                        child: Icon(Icons.sticky_note_2_rounded,
+                            color: brown, size: 26),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('ملحوظاتي',
+                                style: TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                    color: brown)),
+                            const SizedBox(height: 3),
+                            Text(
+                                count == 0
+                                    ? 'قصائد وكلام نثر وأقسام خاصة بك'
+                                    : '${arDigits(count)} عنصر',
+                                style:
+                                    TextStyle(fontSize: 13, color: inkSoft)),
+                          ],
+                        ),
+                      ),
+                      Icon(Icons.chevron_left_rounded, color: brown, size: 28),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
+      );
+}
+
+/// صفحة قسم (أو الصفحة الرئيسية لملحوظاتي)
+class NotesPage extends StatelessWidget {
+  final NoteNode folder;
+  const NotesPage({super.key, required this.folder});
+
+  bool get _isRoot => folder.id == 'root';
+
+  Future<void> _newFolder(BuildContext context) async {
+    final name = await _askName(context, 'قسم جديد', hint: 'اسم القسم');
+    if (name == null || name.isEmpty) return;
+    folder.children
+        .add(NoteNode(id: notesStore.newId(), kind: 'folder', title: name));
+    notesStore.changed();
+  }
+
+  Future<void> _newText(BuildContext context) async {
+    final n = NoteNode(id: notesStore.newId(), kind: 'text');
+    folder.children.add(n);
+    notesStore.changed();
+    await Navigator.push(
+        context, MaterialPageRoute(builder: (_) => NoteEditorPage(node: n)));
+    // ملحوظة فارغة تمامًا لا تُحفظ
+    if (n.title.trim().isEmpty && n.body.trim().isEmpty) {
+      folder.children.remove(n);
+    }
+    notesStore.changed();
+  }
+
+  void _addSheet(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: cream,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 8),
+            ListTile(
+              leading: Icon(Icons.create_new_folder_rounded, color: brown),
+              title: const Text('قسم جديد'),
+              subtitle: const Text('لتنظيم ملحوظاتك في مجموعات'),
+              onTap: () {
+                Navigator.pop(ctx);
+                _newFolder(context);
+              },
+            ),
+            ListTile(
+              leading: Icon(Icons.edit_note_rounded, color: brown),
+              title: const Text('ملحوظة أو كلام نثر'),
+              subtitle: const Text('اكتبي أي نص تريدين'),
+              onTap: () {
+                Navigator.pop(ctx);
+                _newText(context);
+              },
+            ),
+            ListTile(
+              leading: Icon(Icons.menu_book_rounded, color: brown),
+              title: const Text('إضافة قصائد'),
+              subtitle: const Text('اختاري من الدواوين'),
+              onTap: () {
+                Navigator.pop(ctx);
+                Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) => PoemPickerPage(folder: folder)));
+              },
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) => AnimatedBuilder(
+        animation: notesStore,
+        builder: (context, _) => Scaffold(
+          appBar: AppBar(
+            backgroundColor:
+                folder.color != 0 ? Color(folder.color) : brown,
+            title: Text(folder.title, style: const TextStyle(fontSize: 16)),
+            actions: [
+              if (!_isRoot)
+                IconButton(
+                  tooltip: 'إعادة تسمية القسم',
+                  icon: const Icon(Icons.edit_rounded),
+                  onPressed: () async {
+                    final n = await _askName(context, 'اسم القسم',
+                        initial: folder.title);
+                    if (n != null && n.isNotEmpty) {
+                      folder.title = n;
+                      notesStore.changed();
+                    }
+                  },
+                ),
+            ],
+          ),
+          floatingActionButton: FloatingActionButton.extended(
+            backgroundColor: brown,
+            foregroundColor: Colors.white,
+            onPressed: () => _addSheet(context),
+            icon: const Icon(Icons.add_rounded),
+            label: const Text('إضافة'),
+          ),
+          body: ListView(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
+            children: [
+              if (folder.children.isEmpty)
+                _EmptyNotes(isRoot: _isRoot)
+              else
+                for (final n in folder.children)
+                  _NoteCard(key: ValueKey(n.id), parent: folder, node: n),
+            ],
+          ),
+        ),
+      );
+}
+
+class _EmptyNotes extends StatelessWidget {
+  final bool isRoot;
+  const _EmptyNotes({required this.isRoot});
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 38),
+        decoration: BoxDecoration(
+          color: cream,
+          borderRadius: BorderRadius.circular(22),
+          border: Border.all(color: accentGold.withOpacity(.5)),
+          boxShadow: _softShadow(.08),
+        ),
+        child: Column(
+          children: [
+            Icon(Icons.sticky_note_2_outlined, size: 54, color: accentGold),
+            const SizedBox(height: 14),
+            Text(isRoot ? 'ملحوظاتك فاضية' : 'هذا القسم فارغ',
+                style: TextStyle(
+                    fontSize: 17, fontWeight: FontWeight.bold, color: brown)),
+            const SizedBox(height: 8),
+            Text(
+                'اضغطي على «إضافة» لتضيفي قسمًا أو ملحوظة نثرية أو قصائد من الدواوين.',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 14, height: 1.5, color: inkSoft)),
+          ],
+        ),
+      );
+}
+
+class _NoteCard extends StatelessWidget {
+  final NoteNode parent;
+  final NoteNode node;
+  const _NoteCard({super.key, required this.parent, required this.node});
+
+  IconData get _icon => node.kind == 'folder'
+      ? Icons.folder_rounded
+      : node.kind == 'poem'
+          ? Icons.menu_book_rounded
+          : Icons.edit_note_rounded;
+
+  List<String> get _bodyLines => node.body.trim().isEmpty
+      ? <String>[]
+      : node.body.trim().split('\n').where((l) => l.trim().isNotEmpty).toList();
+
+  String get _title {
+    if (node.kind == 'poem') return node.poemTitle;
+    if (node.title.trim().isNotEmpty) return node.title.trim();
+    if (node.kind == 'folder') return 'قسم بلا اسم';
+    return _bodyLines.isEmpty ? 'ملحوظة بدون عنوان' : _bodyLines.first;
+  }
+
+  String get _sub {
+    if (node.kind == 'folder') {
+      final c = node.children.length;
+      return c == 0 ? 'قسم فارغ' : '${arDigits(c)} عنصر';
+    }
+    if (node.kind == 'poem') return node.diwan;
+    final lines = node.title.trim().isEmpty ? _bodyLines.skip(1) : _bodyLines;
+    return lines.join(' ');
+  }
+
+  Future<void> _open(BuildContext context) async {
+    if (node.kind == 'folder') {
+      Navigator.push(context,
+          MaterialPageRoute(builder: (_) => NotesPage(folder: node)));
+    } else if (node.kind == 'text') {
+      await Navigator.push(context,
+          MaterialPageRoute(builder: (_) => NoteEditorPage(node: node)));
+      notesStore.changed();
+    } else {
+      _openNotePoem(context, node);
+    }
+  }
+
+  Future<void> _delete(BuildContext context) async {
+    final msg = node.kind == 'folder' && node.children.isNotEmpty
+        ? 'سيُحذف القسم بكل ما فيه (${arDigits(notesStore.countAll(node))} عنصر). متأكدة؟'
+        : 'هل تريدين حذف هذا العنصر؟';
+    final ok = await _confirmDelete(context, msg);
+    if (!ok) return;
+    parent.children.remove(node);
+    notesStore.changed();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final sub = _sub;
+    final hasC = node.color != 0;
+    final nc = Color(node.color);
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      decoration: BoxDecoration(
+        color: hasC ? Color.alphaBlend(nc.withOpacity(.14), cream) : cream,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+            color: hasC ? nc.withOpacity(.85) : accentGold.withOpacity(.5),
+            width: hasC ? 1.6 : 1),
+        boxShadow: _softShadow(.06),
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(18),
+          onTap: () => _open(context),
+          child: Padding(
+            padding: const EdgeInsetsDirectional.fromSTEB(14, 10, 4, 10),
+            child: Row(
+              children: [
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: hasC ? nc : accentGold.withOpacity(.14),
+                  ),
+                  child: Icon(_icon,
+                      color: hasC ? Colors.white : brown, size: 24),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(_title,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                              fontSize: 16,
+                              height: 1.4,
+                              fontWeight: FontWeight.w700,
+                              color: ink)),
+                      if (sub.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 3),
+                          child: Text(sub,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                  fontSize: 13, height: 1.4, color: inkSoft)),
+                        ),
+                    ],
+                  ),
+                ),
+                PopupMenuButton<String>(
+                  icon: Icon(Icons.more_vert_rounded, color: brown),
+                  onSelected: (v) async {
+                    if (v == 'rename') {
+                      final n = await _askName(context, 'اسم القسم',
+                          initial: node.title);
+                      if (n != null && n.isNotEmpty) {
+                        node.title = n;
+                        notesStore.changed();
+                      }
+                    } else if (v == 'color') {
+                      final c = await _pickNoteColor(context, node.color);
+                      if (c != null) {
+                        node.color = c;
+                        notesStore.changed();
+                      }
+                    } else if (v == 'delete') {
+                      await _delete(context);
+                    }
+                  },
+                  itemBuilder: (_) => [
+                    if (node.kind == 'folder')
+                      const PopupMenuItem(
+                          value: 'rename',
+                          child: Row(children: [
+                            Icon(Icons.edit_rounded, size: 20),
+                            SizedBox(width: 10),
+                            Text('إعادة تسمية'),
+                          ])),
+                    const PopupMenuItem(
+                        value: 'color',
+                        child: Row(children: [
+                          Icon(Icons.palette_rounded, size: 20),
+                          SizedBox(width: 10),
+                          Text('تغيير اللون'),
+                        ])),
+                    const PopupMenuItem(
+                        value: 'delete',
+                        child: Row(children: [
+                          Icon(Icons.delete_outline_rounded, size: 20),
+                          SizedBox(width: 10),
+                          Text('حذف'),
+                        ])),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// كتابة ملحوظة نثرية (تُحفظ تلقائيًا أثناء الكتابة)
+class NoteEditorPage extends StatefulWidget {
+  final NoteNode node;
+  const NoteEditorPage({super.key, required this.node});
+  @override
+  State<NoteEditorPage> createState() => _NoteEditorPageState();
+}
+
+class _NoteEditorPageState extends State<NoteEditorPage> {
+  late final TextEditingController _t =
+      TextEditingController(text: widget.node.title);
+  late final TextEditingController _b =
+      TextEditingController(text: widget.node.body);
+  Timer? _timer;
+
+  void _changed() {
+    widget.node.title = _t.text;
+    widget.node.body = _b.text;
+    _timer?.cancel();
+    _timer = Timer(const Duration(milliseconds: 400), notesStore.saveOnly);
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    widget.node.title = _t.text;
+    widget.node.body = _b.text;
+    notesStore.saveOnly();
+    _t.dispose();
+    _b.dispose();
+    super.dispose();
+  }
+
+  Future<void> _copy() async {
+    final text = '${_t.text.trim()}\n${_b.text.trim()}'.trim();
+    if (text.isEmpty) return;
+    await Clipboard.setData(ClipboardData(text: text));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+        .showSnackBar(const SnackBar(content: Text('تم نسخ الملحوظة')));
+  }
+
+  Future<void> _pickColor() async {
+    final c = await _pickNoteColor(context, widget.node.color);
+    if (c == null || !mounted) return;
+    setState(() => widget.node.color = c);
+    notesStore.saveOnly();
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+        appBar: AppBar(
+          backgroundColor:
+              widget.node.color != 0 ? Color(widget.node.color) : brown,
+          title: const Text('ملحوظة', style: TextStyle(fontSize: 16)),
+          actions: [
+            IconButton(
+                tooltip: 'اللون',
+                icon: const Icon(Icons.palette_rounded),
+                onPressed: _pickColor),
+            IconButton(
+                tooltip: 'نسخ',
+                icon: const Icon(Icons.copy_rounded),
+                onPressed: _copy),
+          ],
+        ),
+        body: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            children: [
+              TextField(
+                controller: _t,
+                onChanged: (_) => _changed(),
+                textInputAction: TextInputAction.next,
+                style: TextStyle(
+                    fontSize: 19, fontWeight: FontWeight.bold, color: ink),
+                decoration: _noteDecoration('العنوان (اختياري)'),
+              ),
+              const SizedBox(height: 12),
+              Expanded(
+                child: TextField(
+                  controller: _b,
+                  onChanged: (_) => _changed(),
+                  maxLines: null,
+                  expands: true,
+                  textAlignVertical: TextAlignVertical.top,
+                  keyboardType: TextInputType.multiline,
+                  style: TextStyle(fontSize: 17, height: 1.8, color: ink),
+                  decoration:
+                      _noteDecoration('اكتبي هنا: كلام نثر، فوائد، أفكار...'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+}
+
+/// اختيار قصائد من الدواوين لإضافتها إلى قسم (اضغطي للإضافة، ومرة ثانية للإزالة)
+class PoemPickerPage extends StatefulWidget {
+  final NoteNode folder;
+  const PoemPickerPage({super.key, required this.folder});
+  @override
+  State<PoemPickerPage> createState() => _PoemPickerPageState();
+}
+
+class _PoemPickerPageState extends State<PoemPickerPage> {
+  final TextEditingController _ctrl = TextEditingController();
+  late final List<(String, Poem)> _all = [
+    for (final d in diwanNames)
+      for (final p in (poems[d] ?? const <Poem>[])) (d, p),
+  ];
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  int _indexOf(String d, Poem p) => widget.folder.children.indexWhere(
+      (n) => n.kind == 'poem' && n.diwan == d && n.poemTitle == p.title);
+
+  void _toggle(String d, Poem p) {
+    final i = _indexOf(d, p);
+    if (i >= 0) {
+      widget.folder.children.removeAt(i);
+    } else {
+      widget.folder.children.add(NoteNode(
+          id: notesStore.newId(), kind: 'poem', diwan: d, poemTitle: p.title));
+    }
+    notesStore.changed();
+    setState(() {});
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final q = normalizeArabic(_ctrl.text);
+    final shown = _all
+        .where((e) =>
+            q.isEmpty ||
+            normalizeArabic(e.$2.title).contains(q) ||
+            normalizeArabic(e.$1).contains(q))
+        .toList();
+    return Scaffold(
+      appBar: AppBar(
+        backgroundColor: brown,
+        title: const Text('إضافة قصائد', style: TextStyle(fontSize: 16)),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('تم',
+                  style: TextStyle(color: Colors.white, fontSize: 16))),
+        ],
+      ),
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 6),
+            child: TextField(
+              controller: _ctrl,
+              onChanged: (_) => setState(() {}),
+              decoration: InputDecoration(
+                hintText: 'ابحث باسم القصيدة أو الديوان',
+                hintStyle: TextStyle(color: inkSoft, fontSize: 14),
+                prefixIcon: Icon(Icons.search_rounded, color: brown),
+                filled: true,
+                fillColor: cream,
+                contentPadding: const EdgeInsets.symmetric(vertical: 14),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide: BorderSide(color: accentGold.withOpacity(.6)),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide: BorderSide(color: brown, width: 1.6),
+                ),
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.only(bottom: 6),
+            child: Text('اضغطي على القصيدة لإضافتها، ومرة ثانية لإزالتها',
+                style: TextStyle(fontSize: 12, color: inkSoft)),
+          ),
+          Expanded(
+            child: shown.isEmpty
+                ? const Center(child: Text('لا توجد قصائد مطابقة.'))
+                : ListView.builder(
+                    itemCount: shown.length,
+                    itemBuilder: (_, i) {
+                      final (d, p) = shown[i];
+                      final on = _indexOf(d, p) >= 0;
+                      return ListTile(
+                        title: Text(p.title,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                                fontWeight: FontWeight.w600, color: ink)),
+                        subtitle: Text(d,
+                            style: TextStyle(fontSize: 12, color: inkSoft)),
+                        trailing: Icon(
+                            on
+                                ? Icons.check_circle_rounded
+                                : Icons.add_circle_outline_rounded,
+                            color: on ? const Color(0xFF2E7D32) : brown),
+                        onTap: () => _toggle(d, p),
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 // ───────────── صفحة القصيدة ─────────────
