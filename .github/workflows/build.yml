@@ -13,10 +13,11 @@ jobs:
 
       - name: ترتيب الملفات
         run: |
-          mkdir -p lib assets/images assets/icons
+          mkdir -p lib assets/images assets/icons assets/fonts
           mv -f *.dart lib/
           mv -f green_dome.jpg assets/images/
           mv -f app_icon.png assets/icons/
+          mv -f *.ttf assets/fonts/
 
       - uses: actions/setup-java@v4
         with:
