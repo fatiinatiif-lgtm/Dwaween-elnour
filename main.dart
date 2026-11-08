@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'poems_extra.dart';
 import 'pdf_export.dart';
 import 'saved_files.dart';
+import 'salawat_page.dart';
 
 // ملف التطبيق الكامل (ما عدا القصائد: poems_data.dart)
 // الأقسام بالترتيب:
@@ -476,7 +477,13 @@ class MainShell extends StatefulWidget {
 
 class _MainShellState extends State<MainShell> {
   int selected = 0;
-  final pages = const [HomePage(), DiwansPage(), FavoritesPage(), SettingsPage()];
+  final pages = const [
+    HomePage(),
+    DiwansPage(),
+    SalawatPage(),
+    FavoritesPage(),
+    SettingsPage()
+  ];
 
   @override
   Widget build(BuildContext context) => Scaffold(
@@ -499,6 +506,7 @@ class _FancyBottomBar extends StatelessWidget {
   static const _items = [
     (Icons.home_rounded, 'الرئيسية'),
     (Icons.auto_stories_rounded, 'الدواوين'),
+    (Icons.mosque_rounded, 'الصلوات'),
     (Icons.favorite_rounded, 'المفضلة'),
     (Icons.settings_rounded, 'الإعدادات'),
   ];
@@ -4733,7 +4741,8 @@ class Justified {
 
 /// يمدّ الشطر بالكشيدة حتى يطابق [target] بالضبط تقريبًا.
 /// أي فرق صغير متبقٍ (أقل من عرض تطويلة) يُوزَّع على المسافات بين الكلمات.
-Justified justifyHemistich(String text, TextStyle style, double target) {
+Justified justifyHemistich(String text, TextStyle style, double target,
+    {int maxPerSlot = 6, double maxWordSpacing = 14}) {
   final s = text.trim().replaceAll(RegExp(r'\s+'), ' ');
   var current = s;
   var w = measureText(s, style);
@@ -4750,7 +4759,6 @@ Justified justifyHemistich(String text, TextStyle style, double target) {
           ((a * 0.6180339887) % 1).compareTo((b * 0.6180339887) % 1));
     var cursor = 0;
     var fine = false;
-    const maxPerSlot = 6;
 
     for (var guard = 0; guard < 120; guard++) {
       final remaining = target - w;
@@ -4791,7 +4799,7 @@ Justified justifyHemistich(String text, TextStyle style, double target) {
   final residual = target - w;
   final spaces = ' '.allMatches(current).length;
   var ws = 0.0;
-  if (spaces > 0 && residual > 0.3) ws = math.min(residual / spaces, 14);
+  if (spaces > 0 && residual > 0.3) ws = math.min(residual / spaces, maxWordSpacing);
   return Justified(current, ws, true);
 }
 
