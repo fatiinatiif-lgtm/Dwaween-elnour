@@ -16,7 +16,7 @@ import 'main.dart';
 enum SalawatKind {
   numbered, // صلوات مرقّمة بصيغة {1} {2} ...
   letters, // مرتّبة على الحروف (حرف الهمزة، حرف الباء ...)
-  munajat, // مناجاة: سطور قصيرة تُدمج في فقرة واحدة متصلة
+  munajat, // مناجاة
 }
 
 class SalawatBook {
@@ -92,91 +92,53 @@ Future<List<SBlock>> loadSalawat(SalawatBook book) async {
 
 final RegExp _numRe = RegExp(r'^\s*\{\s*(\d+)\s*\}\s*(.*)$');
 
-/// كل سطر يبدأ بـ {رقم} فقرة مستقلة بنفس رقمها.
-/// سطر العنوان ((...)) يُتجاهل، وأي سطر بلا رقم يُلحق بالفقرة التي قبله.
+/// كل سطر في الملف = فقرة مستقلة بنفس الترتيب، بدون أي دمج.
+/// السطر اللي يبدأ بـ {رقم} يحمل رقمه، وسطر العنوان ((...)) يُتجاهل.
 List<SBlock> _parseNumbered(List<String> lines) {
   final out = <SBlock>[];
   for (final raw in lines) {
     final line = _clean(raw);
-    if (line.isEmpty) continue;
+    if (line.isEmpty || line.startsWith('((')) continue;
     final m = _numRe.firstMatch(line);
     if (m != null) {
       out.add(SBlock(_clean(m.group(2)!), number: int.parse(m.group(1)!)));
-    } else if (line.startsWith('((')) {
-      continue;
-    } else if (out.isNotEmpty) {
-      final last = out.removeLast();
-      out.add(SBlock('${last.text} $line', number: last.number));
+    } else {
+      out.add(SBlock(line));
     }
   }
   return out;
 }
 
-/// «حرف ...» و«صيغة الحروف...» عناوين.
-/// كل سطر يبدأ بـ «اللهم» يفتح فقرة جديدة، وأسطر «وصلّ وسلّم...» التي بعده
-/// تتصل به في نفس الفقرة (لأن الأسطر القصيرة لا تُضبط بالكشيدة بشكل جميل).
+/// «حرف ...» و«صيغة الحروف...» عناوين، وكل سطر غيرهم فقرة مستقلة.
 List<SBlock> _parseLetters(List<String> lines) {
   final out = <SBlock>[];
-  final cur = StringBuffer();
-  void flush() {
-    if (cur.isNotEmpty) {
-      out.add(SBlock(cur.toString().trim()));
-      cur.clear();
-    }
-  }
-
   for (final raw in lines) {
     final line = _clean(raw);
     if (line.isEmpty || line.startsWith('((')) continue;
     final p = _plain(line);
     if (p.startsWith('حرف ') || p.startsWith('صيغة الحروف')) {
-      flush();
       out.add(SBlock(line, heading: true));
-    } else if (p.startsWith('اللهم')) {
-      flush();
-      cur.write(line);
     } else {
-      if (cur.isNotEmpty) cur.write(' ');
-      cur.write(line);
+      out.add(SBlock(line));
     }
   }
-  flush();
   return out;
 }
 
-/// سطر العنوان الأول يُتجاهل (العنوان موجود في الترويسة).
-/// أسطر «الصلاة والسلام عليك يا ...» القصيرة تُدمج في فقرة واحدة متصلة،
-/// والأسطر الطويلة (الافتتاح والخاتمة) كل واحد منها فقرة مستقلة.
-const int _shortLineMax = 80; // عدد الحروف (بلا تشكيل) الفاصل بين القصير والطويل
-
+/// سطر العنوان الأول يُتجاهل (موجود في الترويسة)، وكل سطر بعده فقرة مستقلة.
 List<SBlock> _parseMunajat(List<String> lines) {
   final out = <SBlock>[];
-  final run = StringBuffer();
-  void flush() {
-    if (run.isNotEmpty) {
-      out.add(SBlock(run.toString().trim()));
-      run.clear();
-    }
-  }
-
   var first = true;
   for (final raw in lines) {
     final line = _clean(raw);
     if (line.isEmpty) continue;
-    final p = _plain(line);
     if (first) {
       first = false;
+      final p = _plain(line);
       if (p.length <= 30 && !p.startsWith('اللهم')) continue; // العنوان
     }
-    if (p.length <= _shortLineMax && p.startsWith('الصلاة والسلام عليك')) {
-      if (run.isNotEmpty) run.write(' ');
-      run.write(line);
-    } else {
-      flush();
-      out.add(SBlock(line));
-    }
+    out.add(SBlock(line));
   }
-  flush();
   return out;
 }
 
@@ -471,7 +433,7 @@ class _SalawatReadPageState extends State<SalawatReadPage> {
             );
           }
           final sub = book.kind == SalawatKind.numbered
-              ? '${arDigits(blocks.length)} صلاة'
+              ? '${arDigits(blocks.where((b) => b.number != null).length)} صلاة'
               : book.blurb;
           return ListView(
             padding: const EdgeInsets.fromLTRB(14, 18, 14, 30),
@@ -525,7 +487,11 @@ class _SalawatBodyState extends State<SalawatBody> {
     final lines = _breakLines(t, _style, _w);
     return _Laid(b, [
       for (final l in lines)
-        justifyHemistich(l, _style, _w, maxPerSlot: 10, maxWordSpacing: 22),
+        // السطر القصير يبقى بحجمه الطبيعي بدون مدّ، والطويل يُضبط بالكشيدة
+        measureText(l, _style) < _w * 0.75
+            ? Justified(l, 0, true)
+            : justifyHemistich(l, _style, _w,
+                maxPerSlot: 10, maxWordSpacing: 22),
     ]);
   }
 
