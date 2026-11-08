@@ -28,6 +28,7 @@ flutter:
   uses-material-design: true
   assets:
     - assets/images/green_dome.jpg
+    - assets/salawat/
 
 flutter_launcher_icons:
   android: true
