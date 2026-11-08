@@ -8,9 +8,9 @@ import 'main.dart';
 // ════════════════════════════════════════════════
 // قسم «الصلوات»
 //  • صفحة فيها ثلاث بطاقات (SalawatPage)
-//  • صفحة قراءة (SalawatReadPage): نص نثري مضبوط الأسطر بالكشيدة
-//    فكل سطر يبدأ من أول العرض وينتهي بآخره، بلا فراغات.
-//  • النصوص نفسها في ملفات txt داخل assets/salawat/ (انظري الشرح في الأسفل)
+//  • صفحة قراءة: كل صيغة في سطر مستقل، كل الأسطر مضبوطة بالكشيدة،
+//    بين كل صيغة والتي تليها فاصل القلوب، والتمرير سلس.
+//  • النصوص في ملفات txt داخل assets/salawat/
 // ════════════════════════════════════════════════
 
 enum SalawatKind {
@@ -59,7 +59,7 @@ const salawatBooks = <SalawatBook>[
   ),
 ];
 
-// ───────────── قراءة الملفات وتقسيمها إلى فقرات ─────────────
+// ───────────── قراءة الملفات وتقسيمها إلى صيغ ─────────────
 
 class SBlock {
   final String text;
@@ -92,7 +92,7 @@ Future<List<SBlock>> loadSalawat(SalawatBook book) async {
 
 final RegExp _numRe = RegExp(r'^\s*\{\s*(\d+)\s*\}\s*(.*)$');
 
-/// كل سطر في الملف = فقرة مستقلة بنفس الترتيب، بدون أي دمج.
+/// كل سطر في الملف = صيغة مستقلة بنفس الترتيب، بدون أي دمج.
 /// السطر اللي يبدأ بـ {رقم} يحمل رقمه، وسطر العنوان ((...)) يُتجاهل.
 List<SBlock> _parseNumbered(List<String> lines) {
   final out = <SBlock>[];
@@ -109,7 +109,7 @@ List<SBlock> _parseNumbered(List<String> lines) {
   return out;
 }
 
-/// «حرف ...» و«صيغة الحروف...» عناوين، وكل سطر غيرهم فقرة مستقلة.
+/// «حرف ...» و«صيغة الحروف...» عناوين، وكل سطر غيرهم صيغة مستقلة.
 List<SBlock> _parseLetters(List<String> lines) {
   final out = <SBlock>[];
   for (final raw in lines) {
@@ -125,7 +125,7 @@ List<SBlock> _parseLetters(List<String> lines) {
   return out;
 }
 
-/// سطر العنوان الأول يُتجاهل (موجود في الترويسة)، وكل سطر بعده فقرة مستقلة.
+/// سطر العنوان الأول يُتجاهل (موجود في الترويسة)، وكل سطر بعده صيغة مستقلة.
 List<SBlock> _parseMunajat(List<String> lines) {
   final out = <SBlock>[];
   var first = true;
@@ -142,10 +142,8 @@ List<SBlock> _parseMunajat(List<String> lines) {
   return out;
 }
 
-// ───────────── كسر الفقرة إلى أسطر متقاربة الامتلاء ─────────────
+// ───────────── كسر الصيغة إلى أسطر متقاربة الامتلاء ─────────────
 
-/// يقسم الفقرة إلى أسطر بحيث تكون الفراغات المتبقية في الأسطر كلها
-/// أقل ما يمكن (فتحتاج الكشيدة إلى مدّ بسيط في كل سطر، لا مدّ كبير في سطر واحد).
 List<String> _breakLines(String text, TextStyle st, double width) {
   final words = text.trim().split(RegExp(r'\s+'));
   if (words.length <= 1) return [text.trim()];
@@ -435,13 +433,11 @@ class _SalawatReadPageState extends State<SalawatReadPage> {
           final sub = book.kind == SalawatKind.numbered
               ? '${arDigits(blocks.where((b) => b.number != null).length)} صلاة'
               : book.blurb;
-          return ListView(
-            padding: const EdgeInsets.fromLTRB(14, 18, 14, 30),
-            children: [
-              PoemHeader(title: book.title, diwan: sub, colors: dc),
-              const SizedBox(height: 16),
-              PoemFrame(child: SalawatBody(blocks: blocks)),
-            ],
+          return SalawatList(
+            title: book.title,
+            sub: sub,
+            colors: dc,
+            blocks: blocks,
           );
         },
       ),
@@ -449,7 +445,7 @@ class _SalawatReadPageState extends State<SalawatReadPage> {
   }
 }
 
-// ───────────── جسم النص: فقرات مضبوطة بالكشيدة ─────────────
+// ───────────── قائمة الصيغ: تُبنى عند الحاجة فقط (تمرير سلس) ─────────────
 
 class _Laid {
   final SBlock block;
@@ -457,20 +453,36 @@ class _Laid {
   const _Laid(this.block, this.lines);
 }
 
-class SalawatBody extends StatefulWidget {
+class SalawatList extends StatefulWidget {
+  final String title;
+  final String sub;
+  final (Color, Color) colors;
   final List<SBlock> blocks;
-  const SalawatBody({super.key, required this.blocks});
+  const SalawatList({
+    super.key,
+    required this.title,
+    required this.sub,
+    required this.colors,
+    required this.blocks,
+  });
   @override
-  State<SalawatBody> createState() => _SalawatBodyState();
+  State<SalawatList> createState() => _SalawatListState();
 }
 
-class _SalawatBodyState extends State<SalawatBody> {
+class _SalawatListState extends State<SalawatList> {
+  static const _perPage = 8; // عدد الصيغ في كل إطار
+
   String? _key;
   int _gen = 0;
-  int _next = 0;
-  List<_Laid> _laid = [];
+  final Map<int, _Laid> _cache = {};
   double _w = 0, _size = 22;
   TextStyle _style = const TextStyle();
+
+  @override
+  void dispose() {
+    _gen++;
+    super.dispose();
+  }
 
   TextStyle _styleFor(BuildContext ctx, double size) =>
       withPoemFont(DefaultTextStyle.of(ctx).style.merge(TextStyle(
@@ -487,39 +499,18 @@ class _SalawatBodyState extends State<SalawatBody> {
     final lines = _breakLines(t, _style, _w);
     return _Laid(b, [
       for (final l in lines)
-        // السطر القصير يبقى بحجمه الطبيعي بدون مدّ، والطويل يُضبط بالكشيدة
-        measureText(l, _style) < _w * 0.75
-            ? Justified(l, 0, true)
-            : justifyHemistich(l, _style, _w,
-                maxPerSlot: 10, maxWordSpacing: 22),
+        justifyHemistich(l, _style, _w, maxPerSlot: 16, maxWordSpacing: 24),
     ]);
   }
 
-  void _step(int count) {
-    final end = math.min(widget.blocks.length, _next + count);
-    for (; _next < end; _next++) {
-      _laid.add(_layout(widget.blocks[_next]));
-    }
-  }
+  _Laid _laidAt(int i) => _cache.putIfAbsent(i, () => _layout(widget.blocks[i]));
 
-  /// أول دفعة تُحسب فورًا، والباقي على دفعات صغيرة حتى لا تتجمّد الشاشة
-  void _restart(BuildContext ctx, double avail, double base) {
-    _gen++;
-    _w = avail;
-    _size = base;
-    _style = _styleFor(ctx, base);
-    _laid = [];
-    _next = 0;
-    _step(10);
-    if (_next < widget.blocks.length) _pump(_gen);
-  }
-
-  Future<void> _pump(int gen) async {
-    while (mounted && gen == _gen && _next < widget.blocks.length) {
-      await Future<void>.delayed(const Duration(milliseconds: 1));
+  /// يحسب الصيغ مقدّمًا في الخلفية (بدون إعادة بناء الشاشة) حتى لا يتقطّع التمرير
+  Future<void> _warm(int gen) async {
+    for (var i = 0; i < widget.blocks.length; i++) {
+      await Future<void>.delayed(const Duration(milliseconds: 12));
       if (!mounted || gen != _gen) return;
-      _step(8);
-      setState(() {});
+      _laidAt(i);
     }
   }
 
@@ -554,12 +545,14 @@ class _SalawatBodyState extends State<SalawatBody> {
     );
   }
 
-  Widget _heading(String t) {
+  Widget _heading(String t, {required bool withTop}) {
     final p = currentPalette;
     return Column(
       children: [
-        const OrnamentDivider(),
-        const SizedBox(height: 10),
+        if (withTop) ...[
+          const OrnamentDivider(),
+          const SizedBox(height: 10),
+        ],
         Text(displayText(t),
             textAlign: TextAlign.center,
             style: withPoemFont(TextStyle(
@@ -584,6 +577,30 @@ class _SalawatBodyState extends State<SalawatBody> {
     );
   }
 
+  /// محتوى إطار واحد: عدة صيغ بينها فاصل القلوب
+  Widget _page(int k) {
+    final start = k * _perPage;
+    final end = math.min(widget.blocks.length, start + _perPage);
+    final gap = _size * .95;
+    final kids = <Widget>[];
+    for (var i = start; i < end; i++) {
+      final isHead = widget.blocks[i].heading;
+      if (i > start) {
+        final prevHead = widget.blocks[i - 1].heading;
+        kids.add(isHead || prevHead
+            ? SizedBox(height: gap)
+            : Padding(
+                padding: EdgeInsets.symmetric(vertical: gap * .6),
+                child: const OrnamentDivider(),
+              ));
+      }
+      kids.add(isHead
+          ? _heading(widget.blocks[i].text, withTop: i > start)
+          : _paragraph(_laidAt(i)));
+    }
+    return Column(children: kids);
+  }
+
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
@@ -595,28 +612,33 @@ class _SalawatBodyState extends State<SalawatBody> {
               '${c.maxWidth.toStringAsFixed(1)}|$base|${poemFontColor.value}|${poemFontWeightIndex.value}|${poemFontFamilyIndex.value}|${removeTashkeel.value}|${appDarkMode.value}';
           if (key != _key) {
             _key = key;
-            _restart(ctx, c.maxWidth, base);
+            _gen++;
+            _cache.clear();
+            _w = c.maxWidth - 28 - 56; // هامش القائمة + هامش الإطار
+            _size = base;
+            _style = _styleFor(ctx, base);
+            _warm(_gen);
           }
-          final gap = _size * .95;
-          return Column(
-            children: [
-              for (var i = 0; i < _laid.length; i++) ...[
-                if (i > 0) SizedBox(height: gap),
-                _laid[i].block.heading
-                    ? _heading(_laid[i].block.text)
-                    : _paragraph(_laid[i]),
-              ],
-              if (_next < widget.blocks.length)
-                const Padding(
-                  padding: EdgeInsets.only(top: 18),
-                  child: SizedBox(
-                      width: 22,
-                      height: 22,
-                      child: CircularProgressIndicator(strokeWidth: 2.4)),
-                )
-              else
-                SizedBox(height: gap * .4),
-            ],
+          final pages = (widget.blocks.length + _perPage - 1) ~/ _perPage;
+          return ListView.builder(
+            padding: const EdgeInsets.fromLTRB(14, 18, 14, 30),
+            cacheExtent: 900,
+            itemCount: pages + 1,
+            itemBuilder: (ctx, i) {
+              if (i == 0) {
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 16),
+                  child: PoemHeader(
+                      title: widget.title,
+                      diwan: widget.sub,
+                      colors: widget.colors),
+                );
+              }
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 14),
+                child: PoemFrame(child: _page(i - 1)),
+              );
+            },
           );
         },
       ),
