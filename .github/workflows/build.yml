@@ -13,11 +13,10 @@ jobs:
 
       - name: ترتيب الملفات
         run: |
-          mkdir -p lib assets/images assets/icons assets/fonts
+          mkdir -p lib assets/images assets/icons
           mv -f *.dart lib/
           mv -f green_dome.jpg assets/images/
           mv -f app_icon.png assets/icons/
-          mv -f *.ttf assets/fonts/
 
       - uses: actions/setup-java@v4
         with:
@@ -29,51 +28,11 @@ jobs:
           channel: stable
           cache: true
 
-      - run: flutter create --project-name diwan_alnoor --org com.diwan.alnoor --platforms=android,ios .
+      - run: flutter create --project-name diwan_alnoor --org com.diwan.alnoor --platforms=android .
 
       - name: اسم التطبيق على الهاتف
         run: sed -i 's/android:label="[^"]*"/android:label="دواوين النور"/' android/app/src/main/AndroidManifest.xml
 
-      - name: رفع compileSdk لكل المكتبات
-        run: |
-          mkdir -p ~/.gradle/init.d
-          cat > ~/.gradle/init.d/sdk.gradle <<'EOF'
-          allprojects {
-            afterEvaluate { p ->
-              if (p.hasProperty('android')) {
-                p.android.compileSdkVersion(36)
-              }
-            }
-          }
-          EOF
-
-      - name: تسجيل الخطوط في pubspec
-        run: |
-          python3 -m pip install -q pyyaml --break-system-packages || true
-          python3 - <<'PY'
-          import yaml
-          p = 'pubspec.yaml'
-          d = yaml.safe_load(open(p, encoding='utf-8'))
-          fonts = [
-              ('WinsoftThuluth', 'winsoft-thuluth-pro-bold.ttf', 700),
-              ('ArefRuqaa', 'aref-ruqaa-ink-bold.ttf', 700),
-              ('AAGalaxy', 'aa-galaxy-bold.ttf', 700),
-              ('Amoshref', 'amoshref-thulth.ttf', None),
-              ('DecoThuluth', 'decotype-thuluth-ii.ttf', None),
-              ('Topaz3D', 'mcs-topaz-3d.ttf', None),
-          ]
-          fl = d.get('flutter') or {}
-          d['flutter'] = fl
-          fl['fonts'] = []
-          for fam, asset, w in fonts:
-              item = {'asset': 'assets/fonts/' + asset}
-              if w:
-                  item['weight'] = w
-              fl['fonts'].append({'family': fam, 'fonts': [item]})
-          yaml.safe_dump(d, open(p, 'w', encoding='utf-8'), allow_unicode=True, sort_keys=False)
-          PY
-
-      - run: flutter pub add pdf file_picker:^8.3.7
       - run: flutter pub get
       - run: dart run flutter_launcher_icons
       - run: flutter build apk --release
