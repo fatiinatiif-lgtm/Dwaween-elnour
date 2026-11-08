@@ -29,6 +29,49 @@ flutter:
   assets:
     - assets/images/green_dome.jpg
     - assets/salawat/
+  fonts:
+    - family: WinsoftThuluth
+      fonts:
+        - asset: assets/fonts/winsoft-thuluth-pro-bold.ttf
+    - family: DecoThuluth
+      fonts:
+        - asset: assets/fonts/decotype-thuluth-ii.ttf
+    - family: Amoshref
+      fonts:
+        - asset: assets/fonts/amoshref-thulth.ttf
+    - family: ArefRuqaa
+      fonts:
+        - asset: assets/fonts/aref-ruqaa-ink-bold.ttf
+    - family: AAGalaxy
+      fonts:
+        - asset: assets/fonts/aa-galaxy-bold.ttf
+    - family: Topaz3D
+      fonts:
+        - asset: assets/fonts/mcs-topaz-3d.ttf
+    - family: Mothanna
+      fonts:
+        - asset: assets/fonts/Mothanna.ttf
+    - family: ArefRuqaaBold
+      fonts:
+        - asset: assets/fonts/ArefRuqaa-Bold-1.ttf
+    - family: Palestine
+      fonts:
+        - asset: assets/fonts/Palestine-Regular.ttf
+    - family: DTThuluth
+      fonts:
+        - asset: assets/fonts/Dthuluth.ttf
+    - family: UKIJSulus
+      fonts:
+        - asset: assets/fonts/ukij-sulus-tom.ttf
+    - family: DimaThulth
+      fonts:
+        - asset: assets/fonts/DimaThulth2.ttf
+    - family: Abuhmeda
+      fonts:
+        - asset: assets/fonts/abuhmeda-f2.ttf
+    - family: KacstDecorative
+      fonts:
+        - asset: assets/fonts/KacstDecorative.ttf
 
 flutter_launcher_icons:
   android: true
