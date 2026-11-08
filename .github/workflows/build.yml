@@ -33,6 +33,21 @@ jobs:
       - name: اسم التطبيق على الهاتف
         run: sed -i 's/android:label="[^"]*"/android:label="دواوين النور"/' android/app/src/main/AndroidManifest.xml
 
+      - name: رفع compileSdk لكل الإضافات إلى 36
+        run: |
+          cat >> android/build.gradle.kts <<'EOF'
+
+          subprojects {
+              if (name != "app") {
+                  afterEvaluate {
+                      extensions.findByName("android")?.let {
+                          (it as com.android.build.gradle.BaseExtension).compileSdkVersion(36)
+                      }
+                  }
+              }
+          }
+          EOF
+
       - run: flutter pub get
       - run: dart run flutter_launcher_icons
       - run: flutter build apk --release
