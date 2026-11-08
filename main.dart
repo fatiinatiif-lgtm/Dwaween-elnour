@@ -4423,6 +4423,14 @@ const fontChoices = [
   FontChoice('رقعة عارف حبر', 'ArefRuqaa'),
   FontChoice('جالاكسي', 'AAGalaxy'),
   FontChoice('توباز ثلاثي الأبعاد', 'Topaz3D'),
+  FontChoice('مثنى', 'Mothanna'),
+  FontChoice('رقعة عارف', 'ArefRuqaaBold'),
+  FontChoice('فلسطين', 'Palestine'),
+  FontChoice('ثلث ديكوتايب الأصلي', 'DTThuluth'),
+  FontChoice('ثلث سلس', 'UKIJSulus'),
+  FontChoice('ثلث ديمة', 'DimaThulth'),
+  FontChoice('أبو حميدة', 'Abuhmeda'),
+  FontChoice('كاكست الزخرفي', 'KacstDecorative'),
 ];
 
 /// يطبّق نوع الخط المختار على ستايل
