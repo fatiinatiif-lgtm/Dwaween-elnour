@@ -241,14 +241,17 @@ class SalawatPage extends StatelessWidget {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            const SectionHeading('الصلوات'),
+            const SectionHeading('الصلوات', subtitle: 'ثلاثة أقسام'),
             Padding(
-              padding: const EdgeInsets.only(bottom: 16),
+              padding: const EdgeInsets.only(bottom: 18),
               child: FilledButton.icon(
                 style: FilledButton.styleFrom(
                     backgroundColor: brown,
                     foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 14)),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(18),
+                        side: BorderSide(color: accentGold, width: 1.2)),
+                    padding: const EdgeInsets.symmetric(vertical: 15)),
                 onPressed: () => showSalawatAllPdfSheet(context),
                 icon: const Icon(Icons.picture_as_pdf_rounded),
                 label: const Text('تحويل الصلوات كلها (٣ أقسام) إلى PDF',
@@ -269,28 +272,15 @@ class _SalawatTile extends StatelessWidget {
   const _SalawatTile({required this.book, required this.index});
 
   @override
-  Widget build(BuildContext context) {
-    final dc = diwanColors(index + 1);
-    return ManuscriptCard(
-      colors: dc,
-      seal: CardSeal(icon: book.icon, colors: dc),
-      padding: const EdgeInsets.fromLTRB(18, 34, 18, 24),
-      onTap: () => Navigator.push(context,
-          MaterialPageRoute(builder: (_) => SalawatReadPage(book: book))),
-      child: Column(
-        children: [
-          CardTitle(book.title),
-          const SizedBox(height: 12),
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 34),
-            child: OrnamentDivider(),
-          ),
-          const SizedBox(height: 14),
-          CardPill(icon: Icons.auto_awesome_rounded, text: book.blurb),
-        ],
-      ),
-    );
-  }
+  Widget build(BuildContext context) => BookCard(
+        colors: diwanColors(index + 1),
+        icon: book.icon,
+        title: book.title,
+        pillIcon: Icons.auto_awesome_rounded,
+        pill: book.blurb,
+        onTap: () => Navigator.push(context,
+            MaterialPageRoute(builder: (_) => SalawatReadPage(book: book))),
+      );
 }
 
 // ───────────── صفحة القراءة ─────────────
@@ -739,7 +729,7 @@ class _SalawatListState extends State<SalawatList> {
         builder: (ctx, c) {
           final base = salawatFonts.size.value;
           final key =
-              '${c.maxWidth.toStringAsFixed(1)}|$base|${salawatFonts.color.value}|${salawatFonts.weightIndex.value}|${salawatFonts.familyIndex.value}|${salawatFonts.noTashkeel.value}|${appDarkMode.value}';
+              '${c.maxWidth.toStringAsFixed(1)}|$base|${salawatFonts.color.value}|${salawatFonts.weightIndex.value}|${salawatFonts.familyIndex.value}|${salawatFonts.noTashkeel.value}|$isDarkNow';
           if (key != _key) {
             _key = key;
             _gen++;
