@@ -96,6 +96,105 @@ const paperChoices = [
   PaperChoice('قهوة بالحليب', Color(0xFFEFE3D3)),
 ];
 
+// ───────────── تأثيرات الورقة (اختيارية) ─────────────
+
+/// تأثيرات اختيارية على الورقة. تُحفظ اختياراتك أثناء استخدام التطبيق
+/// وتنطبق على المعاينة وعلى كل الـ PDF والصور.
+class PaperFx {
+  bool gradient = false; // تدرّج: الوسط بلون الورقة والحواف أغمق
+  bool watermark = false; // علامة مائية كبيرة خفيفة خلف النص
+  int edge = 0; // لون حواف التدرّج (0 = تلقائي من لون الزخرفة)
+}
+
+final paperFx = PaperFx();
+
+const paperEdgeLabels = [
+  'تلقائي',
+  'بيج',
+  'ذهبي',
+  'فضي',
+  'بني',
+  'أخضر',
+  'أزرق',
+  'وردي',
+  'بنفسجي',
+];
+const paperEdgeColors = <Color?>[
+  null,
+  Color(0xFFD7B98E),
+  Color(0xFFC9A24B),
+  Color(0xFFB0B7BF),
+  Color(0xFF8D6E63),
+  Color(0xFF7CB342),
+  Color(0xFF4FA8C9),
+  Color(0xFFE6B89C),
+  Color(0xFFB39DDB),
+];
+
+/// إشعار «تم الحفظ» مع زر يفتح صفحة «الملفات» مباشرة (على تبويب الـ PDF أو الصور)
+void _toastSaved(BuildContext context, ScaffoldMessengerState messenger,
+    String text, SavedKind kind) {
+  messenger
+    ..hideCurrentSnackBar()
+    ..showSnackBar(SnackBar(
+      content: Text(text, textAlign: TextAlign.center),
+      duration: const Duration(seconds: 6),
+      action: SnackBarAction(
+        label: 'فتح الملفات',
+        textColor: accentGold,
+        onPressed: () {
+          if (!context.mounted) return;
+          Navigator.of(context).push(MaterialPageRoute(
+              builder: (_) => SavedFilesPage(
+                  initialTab: kind == SavedKind.pdf ? 0 : 1)));
+        },
+      ),
+    ));
+}
+
+/// قسم «تأثيرات الورقة» في نوافذ التصميم؛ [apply] يعيد بناء النافذة (والمعاينة)
+Widget _paperFxSection(void Function(VoidCallback) apply) {
+  Widget sw(String label, bool v, void Function(bool) set) => SwitchListTile(
+        dense: true,
+        contentPadding: EdgeInsets.zero,
+        activeColor: brown,
+        title: Text(label, style: TextStyle(fontSize: 14, color: brownDark)),
+        value: v,
+        onChanged: (x) => apply(() => set(x)),
+      );
+  return Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      sw('تدرّج لون الورقة (الحواف أغمق)', paperFx.gradient,
+          (x) => paperFx.gradient = x),
+      if (paperFx.gradient)
+        Padding(
+          padding: const EdgeInsets.only(bottom: 6),
+          child: Wrap(spacing: 8, runSpacing: 6, children: [
+            for (var i = 0; i < paperEdgeLabels.length; i++)
+              ChoiceChip(
+                label: Text(paperEdgeLabels[i],
+                    style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: paperFx.edge == i
+                            ? FontWeight.bold
+                            : FontWeight.normal,
+                        color:
+                            paperFx.edge == i ? Colors.white : brownDark)),
+                selected: paperFx.edge == i,
+                showCheckmark: false,
+                selectedColor: brown,
+                backgroundColor: Colors.white,
+                onSelected: (_) => apply(() => paperFx.edge = i),
+              ),
+          ]),
+        ),
+      sw('علامة مائية خفيفة خلف النص', paperFx.watermark,
+          (x) => paperFx.watermark = x),
+    ],
+  );
+}
+
 // ───────────── خيارات التصميم ─────────────
 
 const frameLabels = [
@@ -181,7 +280,7 @@ const double _pageH = 594;
 const double _scale = 3.0; // دقة الصورة (3 = حوالي 150 DPI)
 const double _mx = 46; // الهامش الجانبي
 const double _top = 46;
-const double _bottom = _pageH - 46;
+const double _bottom = _pageH - 52; // آخر 52 للترقيم أسفل الصفحة
 const double _avail = _pageW - 2 * _mx;
 
 // ───────────── أدوات رسم صغيرة ─────────────
@@ -321,6 +420,108 @@ void _divider(Canvas c, double cx, double y, double w, Color accent) {
             Offset(right.right, y),
             [accent, accent.withOpacity(0)]));
   c.drawPath(_pdfStar(Offset(cx, y), 7), Paint()..color = accent);
+}
+
+/// شعار كبير لغلاف الديوان (نجمة مزخرفة) لو لم تُختر أيقونة
+void _coverEmblem(Canvas canvas, PdfTheme t, Offset c, double r) {
+  canvas.drawCircle(c, r * 1.15, _fillP(t.accent.withOpacity(.10)));
+  canvas.drawCircle(c, r * 1.15, _stroke(t.accent.withOpacity(.55), .8));
+  canvas.drawPath(_pdfStar(c, r), _fillP(t.dark));
+  canvas.drawPath(_pdfStar(c, r), _stroke(t.accent, 1.6));
+  canvas.drawPath(_pdfStar(c, r * .62, .62), _stroke(t.accent, 1.2));
+  canvas.drawCircle(c, r * .2, _fillP(t.accent));
+}
+
+/// عنوان الغلاف: يصغّر الخط تدريجيًا لو العنوان طويل. يرجع (النص، ارتفاع الترويسة)
+(TextPainter, double) _coverTitle(String text, TextStyle base, Color color) {
+  TextPainter at(double sz) => _centeredPainter(
+      text,
+      base.merge(TextStyle(
+          color: color,
+          fontSize: sz,
+          height: 1.5,
+          fontWeight: FontWeight.bold)),
+      _avail - 60);
+  var sz = 30.0;
+  var tp = at(sz);
+  while (tp.height > 120 && sz > 16) {
+    sz -= 2;
+    tp = at(sz);
+  }
+  return (tp, math.max(tp.height + 52, 90.0));
+}
+
+/// الغلاف الأمامي: أيقونة/شعار، العنوان في ترويسة، سطر تحته، ثم الختام
+void _paintCoverPage(Canvas canvas, PdfTheme t, int header, int icon,
+    TextPainter title, double bannerH, TextPainter sub, TextPainter f1,
+    TextPainter f2) {
+  const cx = _pageW / 2;
+  if (icon > 0) {
+    _paintIcon(canvas, t, icon, const Offset(cx, 105), 80);
+  } else {
+    _coverEmblem(canvas, t, const Offset(cx, 105), 50);
+  }
+  const top = 180.0;
+  _paintHeaderShape(canvas, t, header, Rect.fromLTWH(_mx, top, _avail, bannerH));
+  title.paint(canvas, Offset(_mx + 30, top + (bannerH - title.height) / 2));
+  var cy = top + bannerH + _headerOverhang(header) + 22;
+  _divider(canvas, cx, cy + 8, _avail * .6, t.accent);
+  cy += 16 + 10;
+  sub.paint(canvas, Offset(_mx, cy));
+  final y2 = _pageH - 66 - f2.height;
+  final y1 = y2 - 6 - f1.height;
+  _divider(canvas, cx, y1 - 22, _avail * .5, t.accent);
+  f1.paint(canvas, Offset(_mx, y1));
+  f2.paint(canvas, Offset(_mx, y2));
+}
+
+/// الغلاف الخلفي: زخرفة فقط بدون أي كلام
+void _paintBackCover(Canvas canvas, PdfTheme t, int icon) {
+  const cx = _pageW / 2;
+  const cy = _pageH / 2;
+  if (icon > 0) {
+    _paintIcon(canvas, t, icon, const Offset(cx, cy), 110);
+  } else {
+    _coverEmblem(canvas, t, const Offset(cx, cy), 62);
+  }
+  _divider(canvas, cx, cy - 112, _avail * .6, t.accent);
+  _divider(canvas, cx, cy + 112, _avail * .6, t.accent);
+}
+
+/// رقم الصفحة أسفلها: ◆ ٣ ◆ بخطين متلاشيين (لا يظهر لو الملف صفحة واحدة)
+void _paintPageNumber(
+    Canvas canvas, PdfTheme t, TextStyle base, int n, int total) {
+  if (total <= 1) return;
+  final tp = TextPainter(
+    text: TextSpan(
+        text: arDigits(n),
+        style: base.merge(TextStyle(
+            color: t.dark,
+            fontSize: 13,
+            height: 1.0,
+            fontWeight: FontWeight.bold))),
+    textDirection: TextDirection.rtl,
+    textScaler: TextScaler.noScaling,
+  )..layout();
+  const cx = _pageW / 2;
+  const cy = _pageH - 44.0;
+  final half = math.max(tp.width / 2, 6.0) + 11;
+  const lineW = 36.0;
+  final l = Rect.fromLTRB(cx - half - lineW, cy - .6, cx - half - 5, cy + .6);
+  final r = Rect.fromLTRB(cx + half + 5, cy - .6, cx + half + lineW, cy + .6);
+  canvas.drawRect(
+      l,
+      Paint()
+        ..shader = ui.Gradient.linear(Offset(l.left, cy), Offset(l.right, cy),
+            [t.accent.withOpacity(0), t.accent]));
+  canvas.drawRect(
+      r,
+      Paint()
+        ..shader = ui.Gradient.linear(Offset(r.left, cy), Offset(r.right, cy),
+            [t.accent, t.accent.withOpacity(0)]));
+  _diamondMark(canvas, Offset(cx - half, cy), 3.5, t);
+  _diamondMark(canvas, Offset(cx + half, cy), 3.5, t);
+  tp.paint(canvas, Offset(cx - tp.width / 2, cy - tp.height / 2));
 }
 
 // ───────────── النقوش (خلفية شفافة) ─────────────
@@ -1632,9 +1833,29 @@ void _paintFrame(Canvas canvas, PdfTheme t, int frame) {
 /// الورقة: لون + نقش شفاف + إطار
 void _paintPage(
     Canvas canvas, PdfTheme t, Color paper, int frame, int pattern) {
-  canvas.drawRect(Rect.fromLTWH(0, 0, _pageW, _pageH), Paint()..color = paper);
+  if (paperFx.gradient) {
+    // تدرّج: الوسط بلون الورقة والحواف أغمق قليلًا (مثل الورق القديم)
+    final tint = paperEdgeColors[paperFx.edge] ?? t.accent;
+    final edge = Color.lerp(paper, tint, paperFx.edge == 0 ? .14 : .28)!;
+    canvas.drawRect(
+        Rect.fromLTWH(0, 0, _pageW, _pageH),
+        Paint()
+          ..shader = ui.Gradient.radial(const Offset(_pageW / 2, _pageH / 2),
+              _pageH * .72, [paper, paper, edge], const [0, .5, 1]));
+  } else {
+    canvas.drawRect(
+        Rect.fromLTWH(0, 0, _pageW, _pageH), Paint()..color = paper);
+  }
   canvas.save();
   canvas.clipRRect(_frameClip(frame));
+  // علامة مائية كبيرة خفيفة خلف النص (النقش رقم ٧ فيه علامة مائية خاصة به)
+  if (paperFx.watermark && pattern != 7) {
+    const c = Offset(_pageW / 2, _pageH / 2);
+    canvas.drawPath(_pdfStar(c, 175, .78), _fillP(t.accent.withOpacity(.045)));
+    canvas.drawPath(
+        _pdfStar(c, 175, .78), _stroke(t.accent.withOpacity(.10), 1.2));
+    canvas.drawCircle(c, 95, _stroke(t.accent.withOpacity(.08), 1));
+  }
   _paintPattern(canvas, t, pattern);
   canvas.restore();
   _paintFrame(canvas, t, frame);
@@ -1642,10 +1863,8 @@ void _paintPage(
 
 // ───────────── الترويسة ─────────────
 
-/// الترويسة: نجمة + العنوان في الوسط + زخرفة + اسم الديوان (4 أشكال)
-void _paintHeader(Canvas canvas, PdfTheme t, int style, double top, double h,
-    TextPainter title, TextPainter diwan) {
-  final rect = Rect.fromLTWH(_mx, top, _avail, h);
+/// شكل الترويسة فقط (بدون نص) داخل [rect] — يُستخدم للترويسة وللعناوين المزخرفة
+void _paintHeaderShape(Canvas canvas, PdfTheme t, int style, Rect rect) {
   final filled = _headerDark(style);
   if (style >= 4) {
     _paintHeaderExtra(canvas, t, style, rect);
@@ -1682,6 +1901,22 @@ void _paintHeader(Canvas canvas, PdfTheme t, int style, double top, double h,
     canvas.drawRRect(rr.deflate(6), _stroke(t.dark.withOpacity(.55), .9));
   }
   }
+}
+
+/// ما تتجاوزه بعض الأشكال أسفل المستطيل (بطن مقوّس، ذيلا الشريط، الظل)
+double _headerOverhang(int style) => switch (style) {
+      7 => 14.0,
+      17 => 12.0,
+      9 => 4.0,
+      _ => 0.0,
+    };
+
+/// الترويسة: نجمة + العنوان في الوسط + زخرفة + اسم الديوان (4 أشكال)
+void _paintHeader(Canvas canvas, PdfTheme t, int style, double top, double h,
+    TextPainter title, TextPainter diwan) {
+  final rect = Rect.fromLTWH(_mx, top, _avail, h);
+  final filled = _headerDark(style);
+  _paintHeaderShape(canvas, t, style, rect);
 
   var y = top + 30;
   canvas.drawPath(_pdfStar(Offset(_pageW / 2, y + 11), 11),
@@ -1770,30 +2005,10 @@ Future<Uint8List> buildPoemPdf({
         textScaler: TextScaler.noScaling,
       )..layout(minWidth: width, maxWidth: width);
 
-  // الترويسة (الصفحة الأولى)
   final darkHeader = _headerDark(header);
-  final titleP = centered(
-      poem.title,
-      baseStyle.merge(TextStyle(
-          color: darkHeader ? Colors.white : theme.dark,
-          fontSize: 22,
-          height: 1.5,
-          fontWeight: FontWeight.bold)),
-      _avail - 60);
-  final diwanP = centered(
-      diwan,
-      baseStyle.merge(TextStyle(
-          color: darkHeader
-              ? const Color(0xFFE8D9BC)
-              : Color.lerp(theme.accent, Colors.black, .35),
-          fontSize: 14,
-          height: 1.4)),
-      _avail - 60);
-  final headerH = 30 + 22 + 10 + titleP.height + 10 + 16 + 10 + diwanP.height + 22;
-  final headerTop = 38.0 + (icon > 0 ? _iconBand : 0);
-  final firstStart = headerTop + headerH + 26;
+  final titleColor = darkHeader ? Colors.white : theme.dark;
 
-  // التذييل (الصفحة الأخيرة)
+  // التذييل (الغلاف + الصفحة الأخيرة)
   final f1 = centered(
       'كلمات شاعر رسول الله ﷺ',
       baseStyle.merge(TextStyle(
@@ -1807,6 +2022,31 @@ Future<Uint8List> buildPoemPdf({
           fontWeight: FontWeight.w600)),
       _avail);
   final footerH = 26 + 16 + 14 + f1.height + 8 + f2.height + 4;
+
+  // الغلاف: عنوان القصيدة في ترويسة، واسم الديوان تحتها
+  final (coverTitle, coverBannerH) =
+      _coverTitle(poem.title, baseStyle, titleColor);
+  final coverSub = centered(
+      diwan,
+      baseStyle.merge(TextStyle(
+          color: Color.lerp(theme.accent, Colors.black, .35),
+          fontSize: 16,
+          height: 1.4,
+          fontWeight: FontWeight.w600)),
+      _avail);
+
+  // عنوان القصيدة أعلى أول صفحة: ترويسة مزخرفة مدمجة
+  final titleP = centered(
+      poem.title,
+      baseStyle.merge(TextStyle(
+          color: titleColor,
+          fontSize: 20,
+          height: 1.5,
+          fontWeight: FontWeight.bold)),
+      _avail - 60);
+  final bannerH = math.max(titleP.height + 28, 58.0);
+  final overhang = _headerOverhang(header);
+  final firstStart = _top + bannerH + overhang + 22;
 
   // توزيع الأبيات على الصفحات
   final pages = <List<int>>[<int>[]];
@@ -1823,17 +2063,29 @@ Future<Uint8List> buildPoemPdf({
     pages.last.add(i);
   }
 
-  Future<Uint8List> renderPage(int pi, List<int> idx) async {
+  Future<Uint8List> rasterPng(void Function(Canvas) draw) async {
     final rec = ui.PictureRecorder();
     // بدون cullRect: وجوده مع التكبير كان يقص كل ما بعد أول ثلث من الصفحة
     final canvas = Canvas(rec);
     canvas.scale(_scale);
     _paintPage(canvas, theme, paper, frame, pattern);
+    draw(canvas);
+    final pic = rec.endRecording();
+    final img = await pic.toImage(
+        (_pageW * _scale).round(), (_pageH * _scale).round());
+    final bd = await img.toByteData(format: ui.ImageByteFormat.png);
+    img.dispose();
+    pic.dispose();
+    return bd!.buffer.asUint8List();
+  }
 
+  void paintContent(Canvas canvas, int pi, List<int> idx) {
     var py = _top;
     if (pi == 0) {
-      _paintHeader(canvas, theme, header, headerTop, headerH, titleP, diwanP);
-      _paintIcon(canvas, theme, icon, const Offset(_pageW / 2, _iconCy), _iconSize);
+      _paintHeaderShape(
+          canvas, theme, header, Rect.fromLTWH(_mx, _top, _avail, bannerH));
+      titleP.paint(
+          canvas, Offset(_mx + 30, _top + (bannerH - titleP.height) / 2));
       py = firstStart;
     }
     for (var k = 0; k < idx.length; k++) {
@@ -1858,19 +2110,11 @@ Future<Uint8List> buildPoemPdf({
       py += f1.height + 8;
       f2.paint(canvas, Offset(_mx, py));
     }
-
-    final pic = rec.endRecording();
-    final img = await pic.toImage(
-        (_pageW * _scale).round(), (_pageH * _scale).round());
-    final bd = await img.toByteData(format: ui.ImageByteFormat.png);
-    img.dispose();
-    pic.dispose();
-    return bd!.buffer.asUint8List();
+    _paintPageNumber(canvas, theme, baseStyle, pi + 1, pages.length);
   }
 
   final doc = pw.Document();
-  for (var pi = 0; pi < pages.length; pi++) {
-    final png = await renderPage(pi, pages[pi]);
+  void addImage(Uint8List png) {
     final image = pw.MemoryImage(png);
     doc.addPage(pw.Page(
       pageFormat: PdfPageFormat.a4,
@@ -1881,6 +2125,14 @@ Future<Uint8List> buildPoemPdf({
       ),
     ));
   }
+
+  // الغلاف الأمامي ثم الأبيات ثم الغلاف الخلفي (بدون كلام)
+  addImage(await rasterPng((c) => _paintCoverPage(c, theme, header, icon,
+      coverTitle, coverBannerH, coverSub, f1, f2)));
+  for (var pi = 0; pi < pages.length; pi++) {
+    addImage(await rasterPng((c) => paintContent(c, pi, pages[pi])));
+  }
+  addImage(await rasterPng((c) => _paintBackCover(c, theme, icon)));
   return doc.save();
 }
 
@@ -2169,6 +2421,8 @@ Future<_Design?> _pickDesign(BuildContext context, String heading,
                               onTap: () => setS(() => paperI = i),
                             ),
                         ]),
+                        title('تأثيرات الورقة'),
+                        _paperFxSection((f) => setS(f)),
                       ],
                     ),
                   ),
@@ -2287,9 +2541,12 @@ Future<void> _exportPdf(BuildContext context, Poem poem, String diwan,
 
   // يُحفظ مباشرة داخل التطبيق (قسم "الملفات") باسم القصيدة، بدون أي سؤال
   final inApp = await SavedFiles.save(SavedKind.pdf, poem.title, bytes);
-  toast(inApp != null
-      ? 'تم حفظ القصيدة في قسم «الملفات»'
-      : 'تعذّر حفظ الملف');
+  if (inApp != null && context.mounted) {
+    _toastSaved(context, messenger, 'تم حفظ القصيدة في قسم «الملفات»',
+        SavedKind.pdf);
+  } else {
+    toast('تعذّر حفظ الملف');
+  }
 }
 
 
@@ -2657,6 +2914,8 @@ Future<void> showVerseImageSheet(
                         chips(frameLabels, frameI, (i) => frameI = i),
                         title('نقوش الخلفية'),
                         chips(patternLabels, patI, (i) => patI = i),
+                        title('تأثيرات الورقة'),
+                        _paperFxSection(change),
                       ],
                     ),
                   ),
@@ -2683,9 +2942,15 @@ Future<void> showVerseImageSheet(
                             // يُحفظ مباشرة داخل التطبيق (قسم "الملفات") باسم القصيدة، بدون أي سؤال
                             final inApp = await SavedFiles.save(
                                 SavedKind.image, poem.title, bytes);
-                            toast(inApp != null
-                                ? 'تم حفظ الصورة في قسم «الملفات»'
-                                : 'تعذّر حفظ الصورة');
+                            if (inApp != null && context.mounted) {
+                              _toastSaved(
+                                  context,
+                                  messenger,
+                                  'تم حفظ الصورة في قسم «الملفات»',
+                                  SavedKind.image);
+                            } else {
+                              toast('تعذّر حفظ الصورة');
+                            }
                           },
                           icon: const Icon(Icons.download_rounded),
                           label: const Text('حفظ الصورة',
@@ -2890,28 +3155,31 @@ Future<Uint8List> buildSalawatPdf({
     if (i % 6 == 5) await Future<void>.delayed(Duration.zero);
   }
 
-  // الترويسة (الصفحة الأولى)
   final darkHeader = _headerDark(header);
+  final titleColor = darkHeader ? Colors.white : theme.dark;
+
+  // الغلاف: عنوان القسم في ترويسة، والسطر الفرعي تحته
+  final (coverTitle, coverBannerH) = _coverTitle(title, baseStyle, titleColor);
+  final coverSub = _centeredPainter(
+      subtitle,
+      baseStyle.merge(TextStyle(
+          color: Color.lerp(theme.accent, Colors.black, .35),
+          fontSize: 16,
+          height: 1.4,
+          fontWeight: FontWeight.w600)),
+      _avail);
+
+  // عنوان القسم أعلى أول صفحة: ترويسة مزخرفة مدمجة
   final titleP = _centeredPainter(
       title,
       baseStyle.merge(TextStyle(
-          color: darkHeader ? Colors.white : theme.dark,
-          fontSize: 22,
+          color: titleColor,
+          fontSize: 20,
           height: 1.5,
           fontWeight: FontWeight.bold)),
       _avail - 60);
-  final subP = _centeredPainter(
-      subtitle,
-      baseStyle.merge(TextStyle(
-          color: darkHeader
-              ? const Color(0xFFE8D9BC)
-              : Color.lerp(theme.accent, Colors.black, .35),
-          fontSize: 14,
-          height: 1.4)),
-      _avail - 60);
-  final headerH = 30 + 22 + 10 + titleP.height + 10 + 16 + 10 + subP.height + 22;
-  final headerTop = 38.0 + (icon > 0 ? _iconBand : 0);
-  final firstStart = headerTop + headerH + 26;
+  final bannerH = math.max(titleP.height + 28, 58.0);
+  final firstStart = _top + bannerH + _headerOverhang(header) + 22;
 
   // توزيع الصيغ على الصفحات
   final gap = size * .95;
@@ -2944,16 +3212,28 @@ Future<Uint8List> buildSalawatPdf({
   }
 
   const scale = 2.5;
-  Future<Uint8List> renderPage(int pi, List<int> idx) async {
+  Future<Uint8List> rasterPng(void Function(Canvas) draw) async {
     final rec = ui.PictureRecorder();
     final canvas = Canvas(rec);
     canvas.scale(scale);
     _paintPage(canvas, theme, paper, frame, pattern);
+    draw(canvas);
+    final pic = rec.endRecording();
+    final img = await pic.toImage(
+        (_pageW * scale).round(), (_pageH * scale).round());
+    final bd = await img.toByteData(format: ui.ImageByteFormat.png);
+    img.dispose();
+    pic.dispose();
+    return bd!.buffer.asUint8List();
+  }
 
+  void paintContent(Canvas canvas, int pi, List<int> idx) {
     var py = _top;
     if (pi == 0) {
-      _paintHeader(canvas, theme, header, headerTop, headerH, titleP, subP);
-      _paintIcon(canvas, theme, icon, const Offset(_pageW / 2, _iconCy), _iconSize);
+      _paintHeaderShape(
+          canvas, theme, header, Rect.fromLTWH(_mx, _top, _avail, bannerH));
+      titleP.paint(
+          canvas, Offset(_mx + 30, _top + (bannerH - titleP.height) / 2));
       py = firstStart;
     }
     for (var k = 0; k < idx.length; k++) {
@@ -2972,19 +3252,11 @@ Future<Uint8List> buildSalawatPdf({
     if (pi == pages.length - 1) {
       _paintSalawatCredit(canvas, credit, theme, creditY);
     }
-
-    final pic = rec.endRecording();
-    final img = await pic.toImage(
-        (_pageW * scale).round(), (_pageH * scale).round());
-    final bd = await img.toByteData(format: ui.ImageByteFormat.png);
-    img.dispose();
-    pic.dispose();
-    return bd!.buffer.asUint8List();
+    _paintPageNumber(canvas, theme, baseStyle, pi + 1, pages.length);
   }
 
   final doc = pw.Document();
-  for (var pi = 0; pi < pages.length; pi++) {
-    final png = await renderPage(pi, pages[pi]);
+  void addImage(Uint8List png) {
     final image = pw.MemoryImage(png);
     doc.addPage(pw.Page(
       pageFormat: PdfPageFormat.a4,
@@ -2994,8 +3266,17 @@ Future<Uint8List> buildSalawatPdf({
         child: pw.Image(image, fit: pw.BoxFit.fill),
       ),
     ));
+  }
+
+  // الغلاف الأمامي ثم الصيغ ثم الغلاف الخلفي (بدون كلام)
+  addImage(await rasterPng((c) => _paintCoverPage(c, theme, header, icon,
+      coverTitle, coverBannerH, coverSub, credit.$1, credit.$2)));
+  await Future<void>.delayed(Duration.zero);
+  for (var pi = 0; pi < pages.length; pi++) {
+    addImage(await rasterPng((c) => paintContent(c, pi, pages[pi])));
     await Future<void>.delayed(Duration.zero);
   }
+  addImage(await rasterPng((c) => _paintBackCover(c, theme, icon)));
   return doc.save();
 }
 
@@ -3060,7 +3341,12 @@ Future<void> showSalawatPdfSheet(BuildContext context, SalawatBook book,
     return;
   }
   final inApp = await SavedFiles.save(SavedKind.pdf, book.title, bytes);
-  toast(inApp != null ? 'تم حفظ الملف في قسم «الملفات»' : 'تعذّر حفظ الملف');
+  if (inApp != null && context.mounted) {
+    _toastSaved(context, messenger, 'تم حفظ الملف في قسم «الملفات»',
+        SavedKind.pdf);
+  } else {
+    toast('تعذّر حفظ الملف');
+  }
 }
 
 // ───────────── صيغة إلى ثلاث صيغ كصورة ─────────────
@@ -3368,6 +3654,8 @@ Future<bool> showSalawatImageSheet(
                         chips(frameLabels, frameI, (i) => frameI = i),
                         title('نقوش الخلفية'),
                         chips(patternLabels, patI, (i) => patI = i),
+                        title('تأثيرات الورقة'),
+                        _paperFxSection(change),
                       ],
                     ),
                   ),
@@ -3389,15 +3677,20 @@ Future<bool> showSalawatImageSheet(
                                 SavedKind.image, bookTitle, bytes);
                             if (inApp != null) done = true;
                             if (ctx.mounted) Navigator.pop(ctx);
-                            messenger
-                              ..hideCurrentSnackBar()
-                              ..showSnackBar(SnackBar(
-                                  content: Text(
-                                      inApp != null
-                                          ? 'تم حفظ الصورة في قسم «الملفات»'
-                                          : 'تعذّر حفظ الصورة',
-                                      textAlign: TextAlign.center),
-                                  duration: const Duration(seconds: 3)));
+                            if (inApp != null && context.mounted) {
+                              _toastSaved(
+                                  context,
+                                  messenger,
+                                  'تم حفظ الصورة في قسم «الملفات»',
+                                  SavedKind.image);
+                            } else {
+                              messenger
+                                ..hideCurrentSnackBar()
+                                ..showSnackBar(SnackBar(
+                                    content: Text('تعذّر حفظ الصورة',
+                                        textAlign: TextAlign.center),
+                                    duration: const Duration(seconds: 3)));
+                            }
                           },
                           icon: const Icon(Icons.download_rounded),
                           label: const Text('حفظ الصورة',
@@ -3442,13 +3735,16 @@ Future<bool> showSalawatImageSheet(
 
 class _DPoem {
   final TextPainter title;
+  final double bannerH; // ارتفاع ترويسة العنوان
+  final double overhang; // ما يزيد أسفلها حسب الشكل
   final List<TextPainter> sadr;
   final List<TextPainter> ajz;
   final double gapV;
   final double gap;
   final List<double> hv;
-  _DPoem(this.title, this.sadr, this.ajz, this.gapV, this.gap, this.hv);
-  double get titleH => title.height + 8 + 16 + 10;
+  _DPoem(this.title, this.bannerH, this.overhang, this.sadr, this.ajz,
+      this.gapV, this.gap, this.hv);
+  double get titleH => bannerH + overhang + 8;
 }
 
 class _DiwanCancelled implements Exception {}
@@ -3565,7 +3861,7 @@ Future<Uint8List> buildDiwanPdf({
       )..layout(minWidth: width, maxWidth: width);
 
   final titleStyle = baseStyle.merge(TextStyle(
-      color: theme.dark,
+      color: _headerDark(header) ? Colors.white : theme.dark,
       fontSize: 19,
       height: 1.5,
       fontWeight: FontWeight.bold));
@@ -3613,37 +3909,21 @@ Future<Uint8List> buildDiwanPdf({
       for (var i = 0; i < sadr.length; i++)
         sadr[i].height + gapV + ajz[i].height
     ];
-    laid.add(_DPoem(centered(poem.title, titleStyle, _avail), sadr, ajz, gapV,
+    // عنوان القصيدة داخل ترويسة مزخرفة بنفس شكل الترويسة المختار
+    final tp = centered(poem.title, titleStyle, _avail - 60);
+    final bannerH = math.max(tp.height + 28, 58.0);
+    laid.add(_DPoem(tp, bannerH, _headerOverhang(header), sadr, ajz, gapV,
         size * .95, hv));
     onProgress?.call(0.25 * (pi + 1) / poemsList.length);
     if (isCancelled?.call() == true) throw _DiwanCancelled();
     await _uiBreath();
   }
 
-  // الترويسة (الصفحة الأولى): اسم الديوان وعدد قصائده
   final darkHeader = _headerDark(header);
-  final titleP = centered(
-      diwan,
-      baseStyle.merge(TextStyle(
-          color: darkHeader ? Colors.white : theme.dark,
-          fontSize: 22,
-          height: 1.5,
-          fontWeight: FontWeight.bold)),
-      _avail - 60);
-  final subP = centered(
-      '${arDigits(poemsList.length)} قصيدة',
-      baseStyle.merge(TextStyle(
-          color: darkHeader
-              ? const Color(0xFFE8D9BC)
-              : Color.lerp(theme.accent, Colors.black, .35),
-          fontSize: 14,
-          height: 1.4)),
-      _avail - 60);
-  final headerH = 30 + 22 + 10 + titleP.height + 10 + 16 + 10 + subP.height + 22;
-  final headerTop = 38.0 + (icon > 0 ? _iconBand : 0);
-  final firstStart = headerTop + headerH + 26;
+  final headOverhang = _headerOverhang(header);
+  final bannerText = darkHeader ? Colors.white : theme.dark;
 
-  // التذييل (الصفحة الأخيرة) — نفس تذييل القصيدة
+  // التذييل (آخر صفحة + الغلاف) — نفس تذييل القصيدة
   final f1 = centered(
       'كلمات شاعر رسول الله ﷺ',
       baseStyle.merge(TextStyle(
@@ -3658,6 +3938,64 @@ Future<Uint8List> buildDiwanPdf({
       _avail);
   final footerH = 26 + 16 + 14 + f1.height + 8 + f2.height + 4;
 
+  // ───── الغلاف ─────
+  final (coverTitle, coverBannerH) = _coverTitle(diwan, baseStyle, bannerText);
+  final coverSub = centered(
+      '${arDigits(poemsList.length)} قصيدة',
+      baseStyle.merge(TextStyle(
+          color: Color.lerp(theme.accent, Colors.black, .35),
+          fontSize: 16,
+          height: 1.4,
+          fontWeight: FontWeight.w600)),
+      _avail);
+  void paintCover(Canvas canvas) => _paintCoverPage(canvas, theme, header,
+      icon, coverTitle, coverBannerH, coverSub, f1, f2);
+
+  // ───── الفهرس (يظهر لو الديوان فيه أكثر من قصيدة) ─────
+  final showToc = poemsList.length >= 2;
+  const tocTw = _avail - 56;
+  final tocTitleStyle = baseStyle.merge(TextStyle(
+      color: theme.dark,
+      fontSize: 15,
+      height: 1.5,
+      fontWeight: FontWeight.w600));
+  final tocRows = <TextPainter>[
+    if (showToc)
+      for (final p in poemsList)
+        TextPainter(
+          text: TextSpan(text: p.title, style: tocTitleStyle),
+          textDirection: TextDirection.rtl,
+          textAlign: TextAlign.right,
+          textScaler: TextScaler.noScaling,
+        )..layout(minWidth: tocTw, maxWidth: tocTw),
+  ];
+  final tocBanner = centered(
+      'الفهرس',
+      baseStyle.merge(TextStyle(
+          color: bannerText,
+          fontSize: 22,
+          height: 1.5,
+          fontWeight: FontWeight.bold)),
+      _avail - 60);
+  const tocBannerH = 54.0;
+  final tocStart = _top + tocBannerH + headOverhang + 22;
+  const tocGap = 12.0;
+  final tocPages = <List<int>>[];
+  if (showToc) {
+    tocPages.add(<int>[]);
+    var ty = tocStart;
+    for (var i = 0; i < tocRows.length; i++) {
+      final h = tocRows[i].height;
+      if (tocPages.last.isNotEmpty && ty + h > _bottom) {
+        tocPages.add(<int>[]);
+        ty = tocStart;
+      }
+      tocPages.last.add(i);
+      ty += h + tocGap;
+    }
+  }
+
+  // ───── صفحات القصائد ─────
   // عناصر الترتيب: (رقم القصيدة، -1 = العنوان / رقم البيت)
   final entries = <(int, int)>[];
   for (var i = 0; i < laid.length; i++) {
@@ -3677,7 +4015,7 @@ Future<Uint8List> buildDiwanPdf({
 
   // توزيع العناصر على الصفحات (العنوان لا يبقى وحده في آخر الصفحة)
   final pages = <List<int>>[<int>[]];
-  var y = firstStart;
+  var y = _top;
   for (var k = 0; k < entries.length; k++) {
     final e = entries[k];
     var need = heightOf(e);
@@ -3695,19 +4033,78 @@ Future<Uint8List> buildDiwanPdf({
     pages.last.add(k);
   }
 
-  const scale = 2.5;
-  Future<Uint8List> renderPage(int pi, List<int> idx) async {
-    final rec = ui.PictureRecorder();
-    final canvas = Canvas(rec);
-    canvas.scale(scale);
-    _paintPage(canvas, theme, paper, frame, pattern);
-
-    var py = _top;
-    if (pi == 0) {
-      _paintHeader(canvas, theme, header, headerTop, headerH, titleP, subP);
-      _paintIcon(canvas, theme, icon, const Offset(_pageW / 2, _iconCy), _iconSize);
-      py = firstStart;
+  // أرقام الصفحات: الغلاف ١، ثم الفهرس، ثم القصائد
+  final tocCount = tocPages.length;
+  final totalPages = 1 + tocCount + pages.length + 1; // + الغلاف الخلفي
+  int numberOf(int contentPage) => tocCount + contentPage + 2;
+  final poemPage = List<int>.filled(laid.length, 0);
+  for (var pi = 0; pi < pages.length; pi++) {
+    for (final k in pages[pi]) {
+      if (entries[k].$2 < 0) poemPage[entries[k].$1] = pi;
     }
+  }
+
+  void paintToc(Canvas canvas, int ti) {
+    _paintHeaderShape(
+        canvas, theme, header, Rect.fromLTWH(_mx, _top, _avail, tocBannerH));
+    tocBanner.paint(
+        canvas, Offset(_mx + 30, _top + (tocBannerH - tocBanner.height) / 2));
+    var ry = tocStart;
+    for (final i in tocPages[ti]) {
+      final tp = tocRows[i];
+      final x0 = _mx + 30.0;
+      tp.paint(canvas, Offset(x0, ry));
+      final ms = tp.computeLineMetrics();
+      final first = ms.first;
+      final last = ms.last;
+
+      // رقم القصيدة في نجمة صغيرة (يمين)
+      final sc = Offset(_mx + _avail - 9, ry + first.height / 2);
+      canvas.drawPath(_pdfStar(sc, 9.5), _fillP(theme.dark));
+      canvas.drawPath(_pdfStar(sc, 9.5), _stroke(theme.accent, .9));
+      final ordP = TextPainter(
+        text: TextSpan(
+            text: arDigits(i + 1),
+            style: baseStyle.merge(const TextStyle(
+                color: Colors.white,
+                fontSize: 9,
+                height: 1.0,
+                fontWeight: FontWeight.bold))),
+        textDirection: TextDirection.rtl,
+        textScaler: TextScaler.noScaling,
+      )..layout();
+      ordP.paint(canvas, sc - Offset(ordP.width / 2, ordP.height / 2));
+
+      // رقم الصفحة (يسار) على نفس خط قاعدة آخر سطر من العنوان
+      final pgP = TextPainter(
+        text: TextSpan(
+            text: arDigits(numberOf(poemPage[i])),
+            style: baseStyle.merge(TextStyle(
+                color: theme.dark,
+                fontSize: 14,
+                height: 1.0,
+                fontWeight: FontWeight.bold))),
+        textDirection: TextDirection.rtl,
+        textScaler: TextScaler.noScaling,
+      )..layout();
+      final baseY = ry + last.baseline;
+      pgP.paint(
+          canvas,
+          Offset(_mx,
+              baseY - pgP.computeDistanceToActualBaseline(TextBaseline.alphabetic)));
+
+      // نقط التوصيل بين نهاية العنوان ورقم الصفحة
+      final dotsL = _mx + pgP.width + 8;
+      final dotsR = x0 + last.left - 8;
+      for (var dx = dotsR; dx > dotsL; dx -= 5) {
+        canvas.drawCircle(Offset(dx, baseY - 3), .9, _fillP(theme.accent));
+      }
+      ry += tp.height + tocGap;
+    }
+  }
+
+  void paintContent(Canvas canvas, int pi, List<int> idx) {
+    var py = _top;
     for (var n = 0; n < idx.length; n++) {
       final e = entries[idx[n]];
       final p = laid[e.$1];
@@ -3723,10 +4120,11 @@ Future<Uint8List> buildDiwanPdf({
         }
       }
       if (e.$2 < 0) {
-        p.title.paint(canvas, Offset(_mx, py));
-        py += p.title.height + 8;
-        _divider(canvas, _pageW / 2, py + 8, _avail * .5, theme.accent);
-        py += 16 + 10;
+        _paintHeaderShape(
+            canvas, theme, header, Rect.fromLTWH(_mx, py, _avail, p.bannerH));
+        p.title.paint(
+            canvas, Offset(_mx + 30, py + (p.bannerH - p.title.height) / 2));
+        py += p.bannerH + p.overhang + 8;
       } else {
         final v = e.$2;
         p.sadr[v].paint(canvas, Offset(_mx + _avail - p.sadr[v].width, py));
@@ -3743,10 +4141,23 @@ Future<Uint8List> buildDiwanPdf({
       py += f1.height + 8;
       f2.paint(canvas, Offset(_mx, py));
     }
+  }
+
+  // ───── الغلاف الخلفي ─────
+  void paintBack(Canvas canvas) => _paintBackCover(canvas, theme, icon);
+
+  // ───── تحويل كل صفحة إلى صورة مضغوطة داخل الـ PDF ─────
+  const scale = 2.5;
+  final wPx = (_pageW * scale).round();
+  final hPx = (_pageH * scale).round();
+  Future<Uint8List> rasterize(void Function(Canvas) draw) async {
+    final rec = ui.PictureRecorder();
+    final canvas = Canvas(rec);
+    canvas.scale(scale);
+    _paintPage(canvas, theme, paper, frame, pattern);
+    draw(canvas);
 
     final pic = rec.endRecording();
-    final wPx = (_pageW * scale).round();
-    final hPx = (_pageH * scale).round();
     final img = await pic.toImage(wPx, hPx);
     final bd = await img.toByteData(format: ui.ImageByteFormat.rawRgba);
     img.dispose();
@@ -3770,15 +4181,29 @@ Future<Uint8List> buildDiwanPdf({
   }
 
   final pdf = _MiniPdf();
-  final wPx = (_pageW * scale).round();
-  final hPx = (_pageH * scale).round();
-  for (var pi = 0; pi < pages.length; pi++) {
+  var done = 0;
+  Future<void> addPage(void Function(Canvas) draw) async {
     if (isCancelled?.call() == true) throw _DiwanCancelled();
-    final flate = await renderPage(pi, pages[pi]);
-    pdf.addPage(flate, wPx, hPx);
-    onProgress?.call(0.25 + 0.75 * (pi + 1) / pages.length);
+    pdf.addPage(await rasterize(draw), wPx, hPx);
+    done++;
+    onProgress?.call(0.25 + 0.75 * done / totalPages);
     await _uiBreath();
   }
+
+  await addPage(paintCover);
+  for (var ti = 0; ti < tocPages.length; ti++) {
+    await addPage((c) {
+      paintToc(c, ti);
+      _paintPageNumber(c, theme, baseStyle, ti + 2, totalPages);
+    });
+  }
+  for (var pi = 0; pi < pages.length; pi++) {
+    await addPage((c) {
+      paintContent(c, pi, pages[pi]);
+      _paintPageNumber(c, theme, baseStyle, numberOf(pi), totalPages);
+    });
+  }
+  await addPage(paintBack);
   return pdf.finish(diwan);
 }
 
@@ -3899,5 +4324,10 @@ Future<void> showDiwanPdfSheet(
     return;
   }
   final inApp = await SavedFiles.save(SavedKind.pdf, diwan, bytes);
-  toast(inApp != null ? 'تم حفظ الديوان في قسم «الملفات»' : 'تعذّر حفظ الملف');
+  if (inApp != null && context.mounted) {
+    _toastSaved(context, messenger, 'تم حفظ الديوان في قسم «الملفات»',
+        SavedKind.pdf);
+  } else {
+    toast('تعذّر حفظ الملف');
+  }
 }

@@ -198,11 +198,14 @@ class SavedFiles {
 // ════════════════════════════════════════════════
 
 class SavedFilesPage extends StatelessWidget {
-  const SavedFilesPage({super.key});
+  /// 0 = ملفات PDF، 1 = الصور
+  final int initialTab;
+  const SavedFilesPage({super.key, this.initialTab = 0});
 
   @override
   Widget build(BuildContext context) => DefaultTabController(
         length: 2,
+        initialIndex: initialTab,
         child: Scaffold(
           backgroundColor: beige,
           appBar: AppBar(
