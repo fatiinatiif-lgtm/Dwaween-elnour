@@ -152,6 +152,110 @@ void _toastSaved(BuildContext context, ScaffoldMessengerState messenger,
     ));
 }
 
+/// نافذة التقدّم لأي ملف PDF: نسبة مئوية + الوقت المتبقي + زر إلغاء
+void _showPdfProgress(BuildContext context, String label,
+    ValueNotifier<double> progress, ValueNotifier<bool> cancelled) {
+  final clock = Stopwatch()..start();
+  showDialog<void>(
+    context: context,
+    barrierDismissible: false,
+    builder: (_) => PopScope(
+      canPop: false,
+      child: Dialog(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(22, 22, 22, 10),
+          child: ValueListenableBuilder<double>(
+            valueListenable: progress,
+            builder: (_, p, __) {
+              var eta = 'جاري التحضير…';
+              if (p > 0.04 && p < 1) {
+                final left =
+                    (clock.elapsedMilliseconds * (1 - p) / p / 1000).ceil();
+                eta = left >= 60
+                    ? 'المتبقي حوالي ${arDigits((left / 60).ceil())} دقيقة'
+                    : 'المتبقي حوالي ${arDigits(math.max(left, 1))} ثانية';
+              } else if (p >= 1) {
+                eta = 'جاري الحفظ…';
+              }
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(label,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                          fontSize: 16, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 16),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: LinearProgressIndicator(
+                        value: p, minHeight: 10, color: brown),
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('${arDigits((p * 100).floor())}٪',
+                          style: const TextStyle(fontWeight: FontWeight.bold)),
+                      Text(eta),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Align(
+                    alignment: Alignment.center,
+                    child: TextButton(
+                        onPressed: () => cancelled.value = true,
+                        child: const Text('إلغاء')),
+                  ),
+                ],
+              );
+            },
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+/// يشغّل إنشاء أي ملف PDF مع نافذة التقدّم (النسبة والمتبقي والإلغاء).
+/// يرجع null لو أُلغي أو فشل (وتظهر الرسالة المناسبة).
+Future<Uint8List?> _runPdfJob(
+  BuildContext context,
+  ScaffoldMessengerState messenger,
+  String label,
+  Future<Uint8List> Function(
+          void Function(double progress) onProgress, bool Function() isCancelled)
+      build,
+) async {
+  final progress = ValueNotifier<double>(0);
+  final cancelled = ValueNotifier<bool>(false);
+  _showPdfProgress(context, label, progress, cancelled);
+  await Future<void>.delayed(const Duration(milliseconds: 150));
+
+  Uint8List? bytes;
+  String? err;
+  try {
+    bytes = await build((p) => progress.value = p, () => cancelled.value);
+  } on _DiwanCancelled {
+    err = 'تم إلغاء إنشاء الملف';
+  } catch (_) {
+    err = 'تعذّر إنشاء الملف';
+  }
+  if (context.mounted) Navigator.of(context, rootNavigator: true).pop();
+  progress.dispose();
+  cancelled.dispose();
+
+  if (err != null) {
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(
+          content: Text(err, textAlign: TextAlign.center),
+          duration: const Duration(seconds: 3)));
+    return null;
+  }
+  return bytes;
+}
+
 /// قسم «تأثيرات الورقة» في نوافذ التصميم؛ [apply] يعيد بناء النافذة (والمعاينة)
 Widget _paperFxSection(void Function(VoidCallback) apply) {
   Widget sw(String label, bool v, void Function(bool) set) => SwitchListTile(
@@ -1942,6 +2046,8 @@ Future<Uint8List> buildPoemPdf({
   int pattern = 0,
   int header = 0,
   int icon = 0,
+  void Function(double progress)? onProgress,
+  bool Function()? isCancelled,
 }) async {
   // نفس ستايل النص الذي يستخدمه التطبيق داخل الصفحات (من الثيم)
   final baseStyle = (Theme.of(context).textTheme.bodyMedium ?? const TextStyle())
@@ -2027,7 +2133,7 @@ Future<Uint8List> buildPoemPdf({
   final (coverTitle, coverBannerH) =
       _coverTitle(poem.title, baseStyle, titleColor);
   final coverSub = centered(
-      diwan,
+      titleTwoLines(diwan),
       baseStyle.merge(TextStyle(
           color: Color.lerp(theme.accent, Colors.black, .35),
           fontSize: 16,
@@ -2127,13 +2233,27 @@ Future<Uint8List> buildPoemPdf({
   }
 
   // الغلاف الأمامي ثم الأبيات ثم الغلاف الخلفي (بدون كلام)
+  final totalSteps = pages.length + 3; // + الغلافان + حفظ الملف
+  var doneSteps = 0;
+  Future<void> step() async {
+    if (isCancelled?.call() == true) throw _DiwanCancelled();
+    doneSteps++;
+    onProgress?.call(doneSteps / totalSteps);
+    await _uiBreath();
+  }
+
   addImage(await rasterPng((c) => _paintCoverPage(c, theme, header, icon,
       coverTitle, coverBannerH, coverSub, f1, f2)));
+  await step();
   for (var pi = 0; pi < pages.length; pi++) {
     addImage(await rasterPng((c) => paintContent(c, pi, pages[pi])));
+    await step();
   }
   addImage(await rasterPng((c) => _paintBackCover(c, theme, icon)));
-  return doc.save();
+  await step();
+  final out = await doc.save();
+  onProgress?.call(1);
+  return out;
 }
 
 // ───────────── معاينة حيّة للتصميم ─────────────
@@ -2487,37 +2607,11 @@ Future<void> _exportPdf(BuildContext context, Poem poem, String diwan,
     int header, int icon) async {
   final messenger = ScaffoldMessenger.of(context);
 
-  void toast(String m) => messenger
-    ..hideCurrentSnackBar()
-    ..showSnackBar(SnackBar(
-        content: Text(m, textAlign: TextAlign.center),
-        duration: const Duration(seconds: 3)));
-
-  showDialog<void>(
-    context: context,
-    barrierDismissible: false,
-    builder: (_) => const PopScope(
-      canPop: false,
-      child: Dialog(
-        child: Padding(
-          padding: EdgeInsets.all(24),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              CircularProgressIndicator(),
-              SizedBox(width: 18),
-              Text('جاري إنشاء ملف PDF…'),
-            ],
-          ),
-        ),
-      ),
-    ),
-  );
-  await Future<void>.delayed(const Duration(milliseconds: 150));
-
-  Uint8List? bytes;
-  try {
-    bytes = await buildPoemPdf(
+  final bytes = await _runPdfJob(
+    context,
+    messenger,
+    'جاري إنشاء ملف القصيدة',
+    (onProgress, isCancelled) => buildPoemPdf(
       context: context,
       poem: poem,
       diwan: diwan,
@@ -2528,16 +2622,17 @@ Future<void> _exportPdf(BuildContext context, Poem poem, String diwan,
       pattern: pattern,
       header: header,
       icon: icon,
-    );
-  } catch (_) {
-    bytes = null;
-  }
-  if (context.mounted) Navigator.of(context, rootNavigator: true).pop();
+      onProgress: onProgress,
+      isCancelled: isCancelled,
+    ),
+  );
+  if (bytes == null) return;
 
-  if (bytes == null) {
-    toast('تعذّر إنشاء الملف');
-    return;
-  }
+  void toast(String m) => messenger
+    ..hideCurrentSnackBar()
+    ..showSnackBar(SnackBar(
+        content: Text(m, textAlign: TextAlign.center),
+        duration: const Duration(seconds: 3)));
 
   // يُحفظ مباشرة داخل التطبيق (قسم "الملفات") باسم القصيدة، بدون أي سؤال
   final inApp = await SavedFiles.save(SavedKind.pdf, poem.title, bytes);
@@ -3117,13 +3212,77 @@ TextPainter _centeredPainter(String text, TextStyle s, double width) =>
       textScaler: TextScaler.noScaling,
     )..layout(minWidth: width, maxWidth: width);
 
-// ───────────── القسم كاملًا كملف PDF ─────────────
+// ───────────── القسم كاملًا (أو الأقسام الثلاثة معًا) كملف PDF ─────────────
 
+/// عنوان غلاف ملف «الصلوات كلها»
+const String kSalawatAllTitle = 'صلوات الأنوار على سيد الأبرار\n'
+    'والصلوات المباركات على سيد السادات\n'
+    'ومناجاة الأشواق';
+
+class SalawatPdfSection {
+  final String title;
+  final String subtitle;
+  final List<SBlock> blocks;
+  const SalawatPdfSection(this.title, this.subtitle, this.blocks);
+}
+
+class _SalawatSecLayout {
+  final List<_SalawatPara> paras;
+  final TextPainter titleP;
+  final double bannerH;
+  final double firstStart;
+  _SalawatSecLayout(this.paras, this.titleP, this.bannerH, this.firstStart);
+}
+
+class _SalawatPdfPage {
+  final int section;
+  final bool first; // أول صفحة في القسم (عليها ترويسة العنوان)
+  final List<int> idx = <int>[];
+  bool hasCredit = false; // آخر صفحة في القسم (عليها سطرا الختام)
+  double creditY = 0;
+  _SalawatPdfPage(this.section, {this.first = false});
+}
+
+/// صفحة تُرسم ثم تُضغط وتُكتب مباشرة داخل الـ PDF (أسرع وأخف على الذاكرة)
+Future<Uint8List> _rasterPageFlate(void Function(Canvas) draw, PdfTheme theme,
+    Color paper, int frame, int pattern) async {
+  const scale = 2.5;
+  final wPx = (_pageW * scale).round();
+  final hPx = (_pageH * scale).round();
+  final rec = ui.PictureRecorder();
+  final canvas = Canvas(rec);
+  canvas.scale(scale);
+  _paintPage(canvas, theme, paper, frame, pattern);
+  draw(canvas);
+  final pic = rec.endRecording();
+  final img = await pic.toImage(wPx, hPx);
+  final bd = await img.toByteData(format: ui.ImageByteFormat.rawRgba);
+  img.dispose();
+  pic.dispose();
+  final rgba = bd!.buffer.asUint8List(bd.offsetInBytes, bd.lengthInBytes);
+  final rgb = Uint8List(wPx * hPx * 3);
+  for (var s = 0, d = 0; s < rgba.length; s += 4, d += 3) {
+    final a = rgba[s + 3];
+    if (a == 255) {
+      rgb[d] = rgba[s];
+      rgb[d + 1] = rgba[s + 1];
+      rgb[d + 2] = rgba[s + 2];
+    } else {
+      rgb[d] = math.min(255, rgba[s] + 255 - a);
+      rgb[d + 1] = math.min(255, rgba[s + 1] + 255 - a);
+      rgb[d + 2] = math.min(255, rgba[s + 2] + 255 - a);
+    }
+  }
+  return Uint8List.fromList(_zlibFast.convert(rgb));
+}
+
+/// [sections] قسم واحد (PDF القسم) أو الأقسام الثلاثة معًا (PDF الصلوات كلها).
+/// كل قسم يبدأ في صفحة جديدة بترويسة عنوانه، وسطرا الختام أسفل كل قسم.
 Future<Uint8List> buildSalawatPdf({
   required BuildContext context,
   required String title,
   required String subtitle,
-  required List<SBlock> blocks,
+  required List<SalawatPdfSection> sections,
   required PdfTheme theme,
   required Color textColor,
   required Color paper,
@@ -3131,6 +3290,8 @@ Future<Uint8List> buildSalawatPdf({
   int pattern = 0,
   int header = 0,
   int icon = 0,
+  void Function(double progress)? onProgress,
+  bool Function()? isCancelled,
 }) async {
   final baseStyle = (Theme.of(context).textTheme.bodyMedium ?? const TextStyle())
       .copyWith(decoration: TextDecoration.none);
@@ -3148,18 +3309,79 @@ Future<Uint8List> buildSalawatPdf({
   final credit = _salawatCreditPainters(baseStyle, theme);
   final creditH = _salawatCreditHeight(credit);
 
-  // ضبط كل الصيغ (مع استراحة قصيرة حتى لا تتجمّد دائرة الانتظار)
-  final paras = <_SalawatPara>[];
-  for (var i = 0; i < blocks.length; i++) {
-    paras.add(_makeSalawatPara(blocks[i], style, hw, size, theme));
-    if (i % 6 == 5) await Future<void>.delayed(Duration.zero);
-  }
-
   final darkHeader = _headerDark(header);
   final titleColor = darkHeader ? Colors.white : theme.dark;
+  final gap = size * .95;
+  final divSpace = gap * .6 + 16 + gap * .6;
 
-  // الغلاف: عنوان القسم في ترويسة، والسطر الفرعي تحته
-  final (coverTitle, coverBannerH) = _coverTitle(title, baseStyle, titleColor);
+  // ضبط كل الصيغ وتوزيعها على الصفحات، قسمًا بعد قسم
+  // (مع استراحة قصيرة حتى لا تتجمّد نافذة التقدّم)
+  final totalBlocks = sections.fold<int>(0, (a, x) => a + x.blocks.length);
+  var laid = 0;
+  final secs = <_SalawatSecLayout>[];
+  final pages = <_SalawatPdfPage>[];
+  for (var si = 0; si < sections.length; si++) {
+    final sec = sections[si];
+    final paras = <_SalawatPara>[];
+    for (var i = 0; i < sec.blocks.length; i++) {
+      paras.add(_makeSalawatPara(sec.blocks[i], style, hw, size, theme));
+      laid++;
+      if (i % 6 == 5) {
+        if (isCancelled?.call() == true) throw _DiwanCancelled();
+        onProgress?.call(0.3 * laid / math.max(1, totalBlocks));
+        await _uiBreath();
+      }
+    }
+
+    // عنوان القسم أعلى أول صفحة منه: ترويسة مزخرفة مدمجة (سطران على السجع)
+    final titleP = _centeredPainter(
+        titleTwoLines(sec.title),
+        baseStyle.merge(TextStyle(
+            color: titleColor,
+            fontSize: 20,
+            height: 1.5,
+            fontWeight: FontWeight.bold)),
+        _avail - 60);
+    final bannerH = math.max(titleP.height + 28, 58.0);
+    final firstStart = _top + bannerH + _headerOverhang(header) + 22;
+
+    var page = _SalawatPdfPage(si, first: true);
+    pages.add(page);
+    var y = firstStart;
+    for (var i = 0; i < paras.length; i++) {
+      var need = paras[i].height;
+      // العنوان لا يبقى وحده في آخر الصفحة
+      if (paras[i].heading && i + 1 < paras.length) {
+        need += gap + paras[i + 1].height;
+      }
+      var before = 0.0;
+      if (page.idx.isNotEmpty) {
+        before = (paras[i - 1].heading || paras[i].heading) ? gap : divSpace;
+      }
+      if (page.idx.isNotEmpty && y + before + need > _bottom) {
+        page = _SalawatPdfPage(si);
+        pages.add(page);
+        y = _top;
+        before = 0;
+      }
+      y += before + paras[i].height;
+      page.idx.add(i);
+    }
+    // الختام في آخر صفحة من القسم، ولو لم يتّسع له مكان يُوضع في صفحة جديدة
+    var creditY = y + gap * 1.2;
+    if (creditY + creditH > _bottom) {
+      page = _SalawatPdfPage(si);
+      pages.add(page);
+      creditY = _top + 10;
+    }
+    page.hasCredit = true;
+    page.creditY = creditY;
+    secs.add(_SalawatSecLayout(paras, titleP, bannerH, firstStart));
+  }
+
+  // الغلاف: عنوان الملف في ترويسة (سطران على السجع)، والسطر الفرعي تحته
+  final (coverTitle, coverBannerH) =
+      _coverTitle(titleTwoLines(title), baseStyle, titleColor);
   final coverSub = _centeredPainter(
       subtitle,
       baseStyle.merge(TextStyle(
@@ -3169,77 +3391,21 @@ Future<Uint8List> buildSalawatPdf({
           fontWeight: FontWeight.w600)),
       _avail);
 
-  // عنوان القسم أعلى أول صفحة: ترويسة مزخرفة مدمجة
-  final titleP = _centeredPainter(
-      title,
-      baseStyle.merge(TextStyle(
-          color: titleColor,
-          fontSize: 20,
-          height: 1.5,
-          fontWeight: FontWeight.bold)),
-      _avail - 60);
-  final bannerH = math.max(titleP.height + 28, 58.0);
-  final firstStart = _top + bannerH + _headerOverhang(header) + 22;
-
-  // توزيع الصيغ على الصفحات
-  final gap = size * .95;
-  final divSpace = gap * .6 + 16 + gap * .6;
-  final pages = <List<int>>[<int>[]];
-  var y = firstStart;
-  for (var i = 0; i < paras.length; i++) {
-    var need = paras[i].height;
-    // العنوان لا يبقى وحده في آخر الصفحة
-    if (paras[i].heading && i + 1 < paras.length) {
-      need += gap + paras[i + 1].height;
-    }
-    var before = 0.0;
-    if (pages.last.isNotEmpty) {
-      before = (paras[i - 1].heading || paras[i].heading) ? gap : divSpace;
-    }
-    if (pages.last.isNotEmpty && y + before + need > _bottom) {
-      pages.add(<int>[]);
-      y = _top;
-      before = 0;
-    }
-    y += before + paras[i].height;
-    pages.last.add(i);
-  }
-  // الختام في آخر الصفحة الأخيرة، ولو لم يتّسع له مكان يُوضع في صفحة جديدة
-  var creditY = y + gap * 1.2;
-  if (creditY + creditH > _bottom) {
-    pages.add(<int>[]);
-    creditY = _top + 10;
-  }
-
-  const scale = 2.5;
-  Future<Uint8List> rasterPng(void Function(Canvas) draw) async {
-    final rec = ui.PictureRecorder();
-    final canvas = Canvas(rec);
-    canvas.scale(scale);
-    _paintPage(canvas, theme, paper, frame, pattern);
-    draw(canvas);
-    final pic = rec.endRecording();
-    final img = await pic.toImage(
-        (_pageW * scale).round(), (_pageH * scale).round());
-    final bd = await img.toByteData(format: ui.ImageByteFormat.png);
-    img.dispose();
-    pic.dispose();
-    return bd!.buffer.asUint8List();
-  }
-
-  void paintContent(Canvas canvas, int pi, List<int> idx) {
+  void paintContent(Canvas canvas, int pi) {
+    final pg = pages[pi];
+    final L = secs[pg.section];
     var py = _top;
-    if (pi == 0) {
+    if (pg.first) {
       _paintHeaderShape(
-          canvas, theme, header, Rect.fromLTWH(_mx, _top, _avail, bannerH));
-      titleP.paint(
-          canvas, Offset(_mx + 30, _top + (bannerH - titleP.height) / 2));
-      py = firstStart;
+          canvas, theme, header, Rect.fromLTWH(_mx, _top, _avail, L.bannerH));
+      L.titleP.paint(
+          canvas, Offset(_mx + 30, _top + (L.bannerH - L.titleP.height) / 2));
+      py = L.firstStart;
     }
-    for (var k = 0; k < idx.length; k++) {
-      final i = idx[k];
+    for (var k = 0; k < pg.idx.length; k++) {
+      final i = pg.idx[k];
       if (k > 0) {
-        if (paras[i - 1].heading || paras[i].heading) {
+        if (L.paras[i - 1].heading || L.paras[i].heading) {
           py += gap;
         } else {
           py += gap * .6;
@@ -3247,37 +3413,34 @@ Future<Uint8List> buildSalawatPdf({
           py += 16 + gap * .6;
         }
       }
-      py = _paintSalawatPara(canvas, paras[i], py);
+      py = _paintSalawatPara(canvas, L.paras[i], py);
     }
-    if (pi == pages.length - 1) {
-      _paintSalawatCredit(canvas, credit, theme, creditY);
+    if (pg.hasCredit) {
+      _paintSalawatCredit(canvas, credit, theme, pg.creditY);
     }
     _paintPageNumber(canvas, theme, baseStyle, pi + 1, pages.length);
   }
 
-  final doc = pw.Document();
-  void addImage(Uint8List png) {
-    final image = pw.MemoryImage(png);
-    doc.addPage(pw.Page(
-      pageFormat: PdfPageFormat.a4,
-      margin: pw.EdgeInsets.zero,
-      build: (_) => pw.FullPage(
-        ignoreMargins: true,
-        child: pw.Image(image, fit: pw.BoxFit.fill),
-      ),
-    ));
+  // الغلاف الأمامي ثم الصيغ ثم الغلاف الخلفي (بدون كلام)
+  final pdf = _MiniPdf();
+  final totalPages = pages.length + 2;
+  var done = 0;
+  Future<void> addPage(void Function(Canvas) draw) async {
+    if (isCancelled?.call() == true) throw _DiwanCancelled();
+    pdf.addPage(await _rasterPageFlate(draw, theme, paper, frame, pattern),
+        (_pageW * 2.5).round(), (_pageH * 2.5).round());
+    done++;
+    onProgress?.call(0.3 + 0.7 * done / totalPages);
+    await _uiBreath();
   }
 
-  // الغلاف الأمامي ثم الصيغ ثم الغلاف الخلفي (بدون كلام)
-  addImage(await rasterPng((c) => _paintCoverPage(c, theme, header, icon,
-      coverTitle, coverBannerH, coverSub, credit.$1, credit.$2)));
-  await Future<void>.delayed(Duration.zero);
+  await addPage((c) => _paintCoverPage(c, theme, header, icon, coverTitle,
+      coverBannerH, coverSub, credit.$1, credit.$2));
   for (var pi = 0; pi < pages.length; pi++) {
-    addImage(await rasterPng((c) => paintContent(c, pi, pages[pi])));
-    await Future<void>.delayed(Duration.zero);
+    await addPage((c) => paintContent(c, pi));
   }
-  addImage(await rasterPng((c) => _paintBackCover(c, theme, icon)));
-  return doc.save();
+  await addPage((c) => _paintBackCover(c, theme, icon));
+  return pdf.finish(title.replaceAll('\n', ' '));
 }
 
 /// نافذة تصميم الـ PDF للقسم كاملًا ثم الإنشاء والحفظ
@@ -3288,41 +3451,15 @@ Future<void> showSalawatPdfSheet(BuildContext context, SalawatBook book,
   if (d == null || !context.mounted) return;
 
   final messenger = ScaffoldMessenger.of(context);
-  void toast(String m) => messenger
-    ..hideCurrentSnackBar()
-    ..showSnackBar(SnackBar(
-        content: Text(m, textAlign: TextAlign.center),
-        duration: const Duration(seconds: 3)));
-
-  showDialog<void>(
-    context: context,
-    barrierDismissible: false,
-    builder: (_) => const PopScope(
-      canPop: false,
-      child: Dialog(
-        child: Padding(
-          padding: EdgeInsets.all(24),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              CircularProgressIndicator(),
-              SizedBox(width: 18),
-              Flexible(child: Text('جاري إنشاء ملف PDF… قد يستغرق دقيقة')),
-            ],
-          ),
-        ),
-      ),
-    ),
-  );
-  await Future<void>.delayed(const Duration(milliseconds: 150));
-
-  Uint8List? bytes;
-  try {
-    bytes = await buildSalawatPdf(
+  final bytes = await _runPdfJob(
+    context,
+    messenger,
+    'جاري إنشاء ملف القسم',
+    (onProgress, isCancelled) => buildSalawatPdf(
       context: context,
       title: book.title,
       subtitle: subtitle,
-      blocks: blocks,
+      sections: [SalawatPdfSection(book.title, subtitle, blocks)],
       theme: pdfThemes[d.theme],
       textColor: colorChoices[d.text].color,
       paper: paperChoices[d.paper].color,
@@ -3330,22 +3467,75 @@ Future<void> showSalawatPdfSheet(BuildContext context, SalawatBook book,
       pattern: d.pattern,
       header: d.header,
       icon: d.icon,
-    );
-  } catch (_) {
-    bytes = null;
-  }
-  if (context.mounted) Navigator.of(context, rootNavigator: true).pop();
+      onProgress: onProgress,
+      isCancelled: isCancelled,
+    ),
+  );
+  if (bytes == null) return;
 
-  if (bytes == null) {
-    toast('تعذّر إنشاء الملف');
-    return;
-  }
   final inApp = await SavedFiles.save(SavedKind.pdf, book.title, bytes);
   if (inApp != null && context.mounted) {
     _toastSaved(context, messenger, 'تم حفظ الملف في قسم «الملفات»',
         SavedKind.pdf);
   } else {
-    toast('تعذّر حفظ الملف');
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(const SnackBar(
+          content: Text('تعذّر حفظ الملف', textAlign: TextAlign.center),
+          duration: Duration(seconds: 3)));
+  }
+}
+
+/// الصلوات كلها (الأقسام الثلاثة) في ملف PDF واحد
+Future<void> showSalawatAllPdfSheet(BuildContext context) async {
+  final d = await _pickDesign(context, 'تحويل الصلوات كلها إلى PDF',
+      initialText: salawatFonts.color.value);
+  if (d == null || !context.mounted) return;
+
+  final messenger = ScaffoldMessenger.of(context);
+  final bytes = await _runPdfJob(
+    context,
+    messenger,
+    'جاري إنشاء ملف الصلوات كلها',
+    (onProgress, isCancelled) async {
+      final sections = <SalawatPdfSection>[];
+      for (final b in salawatBooks) {
+        final blocks = await loadSalawat(b);
+        final sub = b.kind == SalawatKind.numbered
+            ? '${arDigits(blocks.where((x) => x.number != null).length)} صلاة'
+            : b.blurb;
+        sections.add(SalawatPdfSection(b.title, sub, blocks));
+      }
+      if (!context.mounted) throw _DiwanCancelled();
+      return buildSalawatPdf(
+        context: context,
+        title: kSalawatAllTitle,
+        subtitle: '${arDigits(sections.length)} أقسام',
+        sections: sections,
+        theme: pdfThemes[d.theme],
+        textColor: colorChoices[d.text].color,
+        paper: paperChoices[d.paper].color,
+        frame: d.frame,
+        pattern: d.pattern,
+        header: d.header,
+        icon: d.icon,
+        onProgress: onProgress,
+        isCancelled: isCancelled,
+      );
+    },
+  );
+  if (bytes == null) return;
+
+  final inApp = await SavedFiles.save(SavedKind.pdf, 'الصلوات كلها', bytes);
+  if (inApp != null && context.mounted) {
+    _toastSaved(context, messenger, 'تم حفظ الملف في قسم «الملفات»',
+        SavedKind.pdf);
+  } else {
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(const SnackBar(
+          content: Text('تعذّر حفظ الملف', textAlign: TextAlign.center),
+          duration: Duration(seconds: 3)));
   }
 }
 
@@ -3939,9 +4129,9 @@ Future<Uint8List> buildDiwanPdf({
   final footerH = 26 + 16 + 14 + f1.height + 8 + f2.height + 4;
 
   // ───── الغلاف ─────
-  final (coverTitle, coverBannerH) = _coverTitle(diwan, baseStyle, bannerText);
+  final (coverTitle, coverBannerH) = _coverTitle(titleTwoLines(diwan), baseStyle, bannerText);
   final coverSub = centered(
-      '${arDigits(poemsList.length)} قصيدة',
+      diwanCountLabel(diwan, poemsList.length),
       baseStyle.merge(TextStyle(
           color: Color.lerp(theme.accent, Colors.black, .35),
           fontSize: 16,
@@ -4218,80 +4408,19 @@ Future<void> showDiwanPdfSheet(
         duration: const Duration(seconds: 3)));
 
   if (list.isEmpty) {
-    toast('لا توجد قصائد في هذا الديوان');
+    toast(isChapterDiwan(diwan)
+        ? 'لا توجد فصول في هذا الديوان'
+        : 'لا توجد قصائد في هذا الديوان');
     return;
   }
   final d = await _pickDesign(context, 'تحويل الديوان كله إلى PDF');
   if (d == null || !context.mounted) return;
 
-  final progress = ValueNotifier<double>(0);
-  final cancelled = ValueNotifier<bool>(false);
-  final clock = Stopwatch()..start();
-
-  showDialog<void>(
-    context: context,
-    barrierDismissible: false,
-    builder: (_) => PopScope(
-      canPop: false,
-      child: Dialog(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(22, 22, 22, 10),
-          child: ValueListenableBuilder<double>(
-            valueListenable: progress,
-            builder: (_, p, __) {
-              var eta = 'جاري التحضير…';
-              if (p > 0.04 && p < 1) {
-                final left =
-                    (clock.elapsedMilliseconds * (1 - p) / p / 1000).ceil();
-                eta = left >= 60
-                    ? 'المتبقي حوالي ${arDigits((left / 60).ceil())} دقيقة'
-                    : 'المتبقي حوالي ${arDigits(math.max(left, 1))} ثانية';
-              }
-              return Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text(
-                      'جاري إنشاء ملف الديوان (${arDigits(list.length)} قصيدة)',
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                          fontSize: 16, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 16),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
-                    child: LinearProgressIndicator(
-                        value: p, minHeight: 10, color: brown),
-                  ),
-                  const SizedBox(height: 10),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text('${arDigits((p * 100).floor())}٪',
-                          style: const TextStyle(fontWeight: FontWeight.bold)),
-                      Text(eta),
-                    ],
-                  ),
-                  const SizedBox(height: 6),
-                  Align(
-                    alignment: Alignment.center,
-                    child: TextButton(
-                        onPressed: () => cancelled.value = true,
-                        child: const Text('إلغاء')),
-                  ),
-                ],
-              );
-            },
-          ),
-        ),
-      ),
-    ),
-  );
-  await Future<void>.delayed(const Duration(milliseconds: 150));
-
-  Uint8List? bytes;
-  var wasCancelled = false;
-  try {
-    bytes = await buildDiwanPdf(
+  final bytes = await _runPdfJob(
+    context,
+    messenger,
+    'جاري إنشاء ملف الديوان (${diwanCountLabel(diwan, list.length)})',
+    (onProgress, isCancelled) => buildDiwanPdf(
       context: context,
       diwan: diwan,
       poemsList: list,
@@ -4302,27 +4431,12 @@ Future<void> showDiwanPdfSheet(
       pattern: d.pattern,
       header: d.header,
       icon: d.icon,
-      onProgress: (p) => progress.value = p,
-      isCancelled: () => cancelled.value,
-    );
-  } on _DiwanCancelled {
-    wasCancelled = true;
-    bytes = null;
-  } catch (_) {
-    bytes = null;
-  }
-  if (context.mounted) Navigator.of(context, rootNavigator: true).pop();
-  progress.dispose();
-  cancelled.dispose();
+      onProgress: onProgress,
+      isCancelled: isCancelled,
+    ),
+  );
+  if (bytes == null) return;
 
-  if (wasCancelled) {
-    toast('تم إلغاء إنشاء الملف');
-    return;
-  }
-  if (bytes == null) {
-    toast('تعذّر إنشاء الملف');
-    return;
-  }
   final inApp = await SavedFiles.save(SavedKind.pdf, diwan, bytes);
   if (inApp != null && context.mounted) {
     _toastSaved(context, messenger, 'تم حفظ الديوان في قسم «الملفات»',

@@ -242,6 +242,20 @@ class SalawatPage extends StatelessWidget {
           padding: const EdgeInsets.all(16),
           children: [
             const SectionHeading('الصلوات'),
+            Padding(
+              padding: const EdgeInsets.only(bottom: 16),
+              child: FilledButton.icon(
+                style: FilledButton.styleFrom(
+                    backgroundColor: brown,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14)),
+                onPressed: () => showSalawatAllPdfSheet(context),
+                icon: const Icon(Icons.picture_as_pdf_rounded),
+                label: const Text('تحويل الصلوات كلها (٣ أقسام) إلى PDF',
+                    style:
+                        TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+              ),
+            ),
             for (var i = 0; i < salawatBooks.length; i++)
               _SalawatTile(book: salawatBooks[i], index: i),
           ],
@@ -331,7 +345,7 @@ class _SalawatTile extends StatelessWidget {
                             mainAxisAlignment: MainAxisAlignment.center,
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(book.title,
+                              Text(titleTwoLines(book.title),
                                   style: TextStyle(
                                       color: ink,
                                       fontSize: 17.5,
@@ -417,7 +431,7 @@ class _SalawatReadPageState extends State<SalawatReadPage> {
   }
 
   String get _fullText {
-    final b = StringBuffer()..writeln(widget.book.title)..writeln();
+    final b = StringBuffer()..writeln(titleTwoLines(widget.book.title))..writeln();
     for (final x in _blocks ?? const <SBlock>[]) {
       final t = salawatDisplayText(x.text);
       if (x.heading) {
@@ -480,7 +494,10 @@ class _SalawatReadPageState extends State<SalawatReadPage> {
     return Scaffold(
       appBar: AppBar(
         backgroundColor: dc.$1,
-        title: Text(book.title, style: const TextStyle(fontSize: 16)),
+        title: Text(titleTwoLines(book.title),
+            textAlign: TextAlign.center,
+            maxLines: 2,
+            style: const TextStyle(fontSize: 14, height: 1.3)),
         actions: [
           IconButton(
               tooltip: 'إعدادات خط الصلوات',
@@ -499,6 +516,10 @@ class _SalawatReadPageState extends State<SalawatReadPage> {
             icon: const Icon(Icons.more_vert_rounded),
             color: cream,
             onSelected: (v) {
+              if (v == 'pdf_all') {
+                showSalawatAllPdfSheet(context);
+                return;
+              }
               final blocks = _blocks;
               if (blocks == null) return;
               if (v == 'pdf') {
@@ -517,6 +538,14 @@ class _SalawatReadPageState extends State<SalawatReadPage> {
                   Icon(Icons.picture_as_pdf_rounded, color: brown),
                   const SizedBox(width: 10),
                   const Text('تحويل القسم إلى PDF'),
+                ]),
+              ),
+              PopupMenuItem(
+                value: 'pdf_all',
+                child: Row(children: [
+                  Icon(Icons.library_books_rounded, color: brown),
+                  const SizedBox(width: 10),
+                  const Text('تحويل الصلوات كلها (٣ أقسام) إلى PDF'),
                 ]),
               ),
               PopupMenuItem(
@@ -843,7 +872,7 @@ class _SalawatListState extends State<SalawatList> {
                 return Padding(
                   padding: const EdgeInsets.only(bottom: 16),
                   child: PoemHeader(
-                      title: widget.title,
+                      title: titleTwoLines(widget.title),
                       diwan: widget.sub,
                       colors: widget.colors),
                 );

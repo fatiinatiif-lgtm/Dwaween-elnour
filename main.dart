@@ -23,11 +23,14 @@ import 'salawat_page.dart';
 // الثيمات: ألوان التطبيق كلها تُقرأ من الثيم المختار
 // ════════════════════════════════════════════════
 
-/// خط كلمة "سيد الشعراء" في شاشة البداية.
+/// خط كلمتي "خير المادحين" في شاشة البداية.
 /// غيّريه لأي family من pubspec.yaml:
 /// 'Amoshref' (ثلث المشرف) • 'WinsoftThuluth' • 'DecoThuluth'
 /// (لا تستخدمي الخطوط الملوّنة مثل ArefRuqaa أو Topaz3D أو AAGalaxy هنا)
 const String kSplashFont = 'Amoshref';
+
+/// خط اسم الشاعر الصغير تحت الكلمتين في شاشة البداية (نفس الخطوط أعلاه)
+const String kSplashAuthorFont = 'Amoshref';
 
 class AppPalette {
   final String label;
@@ -316,7 +319,7 @@ class _DiwanAppState extends State<DiwanApp> {
   }
 }
 
-// ───────────── شاشة البداية: سيد الشعراء + عدّاد إلى 5 ─────────────
+// ───────────── شاشة البداية: خير المادحين + عدّاد إلى 5 ─────────────
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
   @override
@@ -429,9 +432,23 @@ class _SplashScreenState extends State<SplashScreen> {
                         size: const Size(30, 30),
                         painter: _StarPainter(accentGold)),
                     const SizedBox(height: 14),
-                    _word('سيد'),
-                    _word('الشعراء'),
-                    const SizedBox(height: 12),
+                    _word('خير'),
+                    _word('المادحين'),
+                    const SizedBox(height: 4),
+                    Text('عبدالرحمن مصطفى الأزهري',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                            fontFamily: kSplashAuthorFont,
+                            color: accentGold,
+                            fontSize: 26,
+                            height: 1.5,
+                            shadows: const [
+                              Shadow(
+                                  color: Color(0x88000000),
+                                  blurRadius: 6,
+                                  offset: Offset(0, 2)),
+                            ])),
+                    const SizedBox(height: 10),
                     const SizedBox(
                         width: 190, child: OrnamentDivider()),
                     const SizedBox(height: 12),
@@ -1163,6 +1180,40 @@ class _DarkModeBar extends StatelessWidget {
       );
 }
 
+/// يقسم اسم الديوان/القسم إلى سطرين على السجع:
+/// «مسك الكلام» ↵ «في مدح خير الأنام». (الاسم القصير بلا حرف جر يبقى سطرًا واحدًا)
+(String, String?) titleParts(String name) {
+  final t = name.trim().replaceAll(RegExp(r'\s+'), ' ');
+  for (final m in const [' في ', ' على ', ' لسيد ', ' لخير ']) {
+    final i = t.indexOf(m);
+    if (i > 0) return (t.substring(0, i), t.substring(i + 1));
+  }
+  return (t, null);
+}
+
+/// اسم الديوان/القسم كعنوان: سطران (الأول والثاني على السجع)
+String titleTwoLines(String name) {
+  if (name.contains('\n')) return name; // عنوان مقسوم يدويًا
+  final p = titleParts(name);
+  return p.$2 == null ? p.$1 : '${p.$1}\n${p.$2}';
+}
+
+/// «روضة العشاق» محتواه فصول لا قصائد
+bool isChapterDiwan(String name) =>
+    normalizeArabic(name).contains('روضه العشاق');
+
+String chaptersCount(int n) {
+  if (n == 0) return 'لا توجد فصول';
+  if (n == 1) return 'فصل واحد';
+  if (n == 2) return 'فصلان';
+  if (n <= 10) return '${arDigits(n)} فصول';
+  return '${arDigits(n)} فصل';
+}
+
+/// عدد المحتوى تحت اسم الديوان: «٥٣ فصل» لروضة العشاق، و«٢٠ قصيدة» لغيره
+String diwanCountLabel(String name, int n) =>
+    isChapterDiwan(name) ? chaptersCount(n) : '${arDigits(n)} قصيدة';
+
 String _poemsCount(int n) {
   if (n == 0) return 'لا توجد قصائد';
   if (n == 1) return 'قصيدة واحدة';
@@ -1466,7 +1517,7 @@ class DiwanTile extends StatelessWidget {
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text(name,
+                                  Text(titleTwoLines(name),
                                       style: TextStyle(
                                           color: ink,
                                           fontSize: 17.5,
@@ -1494,7 +1545,7 @@ class DiwanTile extends StatelessWidget {
                                             Icon(Icons.auto_stories_rounded,
                                                 size: 15, color: accentGold),
                                             const SizedBox(width: 6),
-                                            Text('${arDigits(count)} قصيدة',
+                                            Text(diwanCountLabel(name, count),
                                                 style: TextStyle(
                                                     color: ink,
                                                     fontSize: 12.5,
@@ -1753,7 +1804,10 @@ class _DiwanDetailPageState extends State<DiwanDetailPage> {
     return Scaffold(
       appBar: AppBar(
           backgroundColor: dc.$1,
-          title: Text(widget.name, style: const TextStyle(fontSize: 16)),
+          title: Text(titleTwoLines(widget.name),
+              textAlign: TextAlign.center,
+              maxLines: 2,
+              style: const TextStyle(fontSize: 14, height: 1.3)),
           actions: [
             IconButton(
               tooltip: 'تحويل الديوان كله إلى PDF',
@@ -1767,8 +1821,8 @@ class _DiwanDetailPageState extends State<DiwanDetailPage> {
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
         children: [
           PoemHeader(
-              title: widget.name,
-              diwan: '${arDigits(list.length)} قصيدة',
+              title: titleTwoLines(widget.name),
+              diwan: diwanCountLabel(widget.name, list.length),
               colors: dc),
           const SizedBox(height: 18),
           if (list.length > 5) ...[
@@ -1776,7 +1830,9 @@ class _DiwanDetailPageState extends State<DiwanDetailPage> {
               controller: ctrl,
               onChanged: (_) => setState(() {}),
               decoration: InputDecoration(
-                hintText: 'ابحث في عناوين قصائد هذا الديوان',
+                hintText: isChapterDiwan(widget.name)
+                    ? 'ابحث في عناوين فصول هذا الديوان'
+                    : 'ابحث في عناوين قصائد هذا الديوان',
                 hintStyle: TextStyle(color: inkSoft, fontSize: 14),
                 prefixIcon: Icon(Icons.search_rounded, color: brown),
                 suffixIcon: q.isNotEmpty
@@ -1800,14 +1856,20 @@ class _DiwanDetailPageState extends State<DiwanDetailPage> {
             const SizedBox(height: 16),
           ],
           if (list.isEmpty)
-            const Padding(
-              padding: EdgeInsets.all(24),
-              child: Center(child: Text('ستظهر القصائد هنا عند إضافتها.')),
+            Padding(
+              padding: const EdgeInsets.all(24),
+              child: Center(
+                  child: Text(isChapterDiwan(widget.name)
+                      ? 'ستظهر الفصول هنا عند إضافتها.'
+                      : 'ستظهر القصائد هنا عند إضافتها.')),
             )
           else if (shown.isEmpty)
-            const Padding(
-              padding: EdgeInsets.all(24),
-              child: Center(child: Text('لا توجد قصائد مطابقة.')),
+            Padding(
+              padding: const EdgeInsets.all(24),
+              child: Center(
+                  child: Text(isChapterDiwan(widget.name)
+                      ? 'لا توجد فصول مطابقة.'
+                      : 'لا توجد قصائد مطابقة.')),
             )
           else
             for (final e in shown)
