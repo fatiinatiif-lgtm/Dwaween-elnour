@@ -641,7 +641,8 @@ class _SalawatListState extends State<SalawatList> {
     final col = Column(
       children: [
         for (var k = 0; k < l.lines.length; k++) ...[
-          if (k > 0) SizedBox(height: _size * .62),
+          if (k > 0)
+            SizedBox(height: _size * .62 * salawatFonts.lineSpacing.value),
           _line(l.lines[k], numberedFirst: numbered && k == 0),
         ],
       ],
@@ -679,7 +680,8 @@ class _SalawatListState extends State<SalawatList> {
         kids.add(isHead || prevHead
             ? SizedBox(height: gap)
             : Padding(
-                padding: EdgeInsets.symmetric(vertical: gap * .6),
+                padding: EdgeInsets.symmetric(
+                    vertical: gap * .6 * salawatFonts.lineSpacing.value),
                 child: const OrnamentDivider(),
               ));
       }
@@ -798,7 +800,8 @@ class SalawatSample extends StatelessWidget {
             for (var i = 0; i < _samples.length; i++) {
               if (i > 0) {
                 kids.add(Padding(
-                  padding: EdgeInsets.symmetric(vertical: size * .6),
+                  padding: EdgeInsets.symmetric(
+                      vertical: size * .6 * salawatFonts.lineSpacing.value),
                   child: const OrnamentDivider(),
                 ));
               }
@@ -818,7 +821,10 @@ class SalawatSample extends StatelessWidget {
                     TextSpan(text: j.text.substring(sp)),
                   ]);
                 }
-                if (k > 0) kids.add(SizedBox(height: size * .62));
+                if (k > 0) {
+                  kids.add(SizedBox(
+                      height: size * .62 * salawatFonts.lineSpacing.value));
+                }
                 kids.add(SizedBox(
                   width: w,
                   child: Text.rich(

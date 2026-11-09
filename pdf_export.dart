@@ -1017,6 +1017,12 @@ Path _svgPath(String d) => _iconPathCache.putIfAbsent(d, () {
       return p;
     });
 
+/// أيقونة صغيرة في الركن العلوي الأيمن من الصفحة؛ لا تحجز أي مساحة من المحتوى
+void _paintCornerIcon(Canvas canvas, PdfTheme t, int icon) {
+  if (icon <= 0) return;
+  _paintIcon(canvas, t, icon, const Offset(_pageW - 62, 66), 40);
+}
+
 /// يرسم الأيقونة [icon] (1..8) في مركز [center] بارتفاع [size]، مع هالة خفيفة خلفها
 void _paintIcon(
     Canvas canvas, PdfTheme t, int icon, Offset center, double size) {
@@ -2099,8 +2105,9 @@ Future<Uint8List> buildPoemPdf({
     ajz.add(hemistich(justifyHemistich(displayText(v.ajz), style, hw)));
   }
   final n = poem.verses.length;
-  final gapV = size * .45;
-  final gap = size * .95;
+  final ls = poemFonts.lineSpacing.value; // تباعد الأسطر
+  final gapV = size * .45 * ls;
+  final gap = size * .95 * ls;
   final hv = [for (var i = 0; i < n; i++) sadr[i].height + gapV + ajz[i].height];
   final sep = gap * 1.2 + 16;
 
@@ -2152,7 +2159,7 @@ Future<Uint8List> buildPoemPdf({
       _avail - 60);
   final bannerH = math.max(titleP.height + 28, 58.0);
   final overhang = _headerOverhang(header);
-  final firstStart = _top + bannerH + overhang + 22;
+  final firstStart = _top + bannerH + overhang + 36;
 
   // توزيع الأبيات على الصفحات
   final pages = <List<int>>[<int>[]];
@@ -2298,8 +2305,9 @@ class _DesignPreview extends CustomPainter {
             fontSize: 14,
             height: 1.4));
     final headerH = 30 + 22 + 10 + title.height + 10 + 16 + 10 + diwan.height + 22;
-    final top = 38.0 + (icon > 0 ? _iconBand : 0);
-    _paintIcon(canvas, theme, icon, const Offset(_pageW / 2, _iconCy), _iconSize);
+    // الأيقونة في الركن الأيمن (فوق الترويسة بدون أن تتداخل معها في المعاينة)
+    final top = 38.0 + (icon > 0 ? 36.0 : 0.0);
+    _paintCornerIcon(canvas, theme, icon);
     _paintHeader(canvas, theme, header, top, headerH, title, diwan);
 
     final bar = _fillP(text.withOpacity(.5));
@@ -2736,14 +2744,14 @@ Future<Uint8List> buildVerseImage({
           fontWeight: FontWeight.w600)),
       _avail);
 
-  final gapV = size * .45;
+  final gapV = size * .45 * poemFonts.lineSpacing.value;
   const betweenVerses = 14.0 + 16 + 14; // فاصل زخرفي بين الأبيات
   var versesH = 0.0;
   for (var i = 0; i < count; i++) {
     versesH += sp[i].height + gapV + aj[i].height;
     if (i > 0) versesH += betweenVerses;
   }
-  final iconH = icon > 0 ? 66.0 : 0.0;
+  const iconH = 0.0; // الأيقونة في الركن فلا تحجز مساحة
   final contentH = iconH + 24 + 12 + titleP.height + 12 + 16 + 28 + versesH + 28 + 16 +
       12 + f1.height + 4 + f2.height;
   var y = math.max(70.0, (_pageH - contentH) / 2);
@@ -2753,10 +2761,7 @@ Future<Uint8List> buildVerseImage({
   canvas.scale(_scale);
   _paintPage(canvas, theme, paper, frame, pattern);
 
-  if (icon > 0) {
-    _paintIcon(canvas, theme, icon, Offset(_pageW / 2, y + 30), 52);
-    y += iconH;
-  }
+  _paintCornerIcon(canvas, theme, icon);
   canvas.drawPath(
       _pdfStar(Offset(_pageW / 2, y + 12), 12), Paint()..color = theme.accent);
   y += 24 + 12;
@@ -3153,7 +3158,8 @@ _SalawatPara _makeSalawatPara(
     painters.add(_salawatLine(j, style, hw,
         numberColor: (b.number != null && k == 0) ? theme.accent : null));
   }
-  return _SalawatPara(false, painters, size * .62);
+  return _SalawatPara(
+      false, painters, size * .62 * salawatFonts.lineSpacing.value);
 }
 
 /// يرسم الصيغة ويرجع الإحداثي الرأسي بعدها
@@ -3234,10 +3240,43 @@ class _SalawatSecLayout {
   _SalawatSecLayout(this.paras, this.titleP, this.bannerH, this.firstStart);
 }
 
+/// جزء من صيغة على صفحة: الأسطر من from إلى to (غير شاملة). الصيغة الطويلة (مثل صيغة
+/// الحروف الهجائية) تُقسَّم على أكثر من صفحة بدل أن تُقصّ أو تترك صفحة فارغة.
+class _SalawatPiece {
+  final int para;
+  final int from;
+  final int to;
+  const _SalawatPiece(this.para, this.from, this.to);
+}
+
+/// ارتفاع الأسطر من from إلى to من الصيغة
+double _salawatLinesH(_SalawatPara p, int from, int to) {
+  var h = 0.0;
+  for (var k = from; k < to; k++) {
+    if (k > from) h += p.lineGap;
+    h += p.lines[k].height;
+  }
+  return h;
+}
+
+/// يرسم الأسطر من from إلى to من الصيغة ويرجع الإحداثي الرأسي بعدها
+double _paintSalawatPiece(
+    Canvas canvas, _SalawatPara p, int from, int to, double y) {
+  if (p.heading) return _paintSalawatPara(canvas, p, y);
+  var py = y;
+  for (var k = from; k < to; k++) {
+    if (k > from) py += p.lineGap;
+    final tp = p.lines[k];
+    tp.paint(canvas, Offset(_mx + _avail - tp.width, py));
+    py += tp.height;
+  }
+  return py;
+}
+
 class _SalawatPdfPage {
   final int section;
   final bool first; // أول صفحة في القسم (عليها ترويسة العنوان)
-  final List<int> idx = <int>[];
+  final List<_SalawatPiece> pieces = <_SalawatPiece>[];
   bool hasCredit = false; // آخر صفحة في القسم (عليها سطرا الختام)
   double creditY = 0;
   _SalawatPdfPage(this.section, {this.first = false});
@@ -3311,7 +3350,7 @@ Future<Uint8List> buildSalawatPdf({
 
   final darkHeader = _headerDark(header);
   final titleColor = darkHeader ? Colors.white : theme.dark;
-  final gap = size * .95;
+  final gap = size * .95 * salawatFonts.lineSpacing.value;
   final divSpace = gap * .6 + 16 + gap * .6;
 
   // ضبط كل الصيغ وتوزيعها على الصفحات، قسمًا بعد قسم
@@ -3343,29 +3382,69 @@ Future<Uint8List> buildSalawatPdf({
             fontWeight: FontWeight.bold)),
         _avail - 60);
     final bannerH = math.max(titleP.height + 28, 58.0);
-    final firstStart = _top + bannerH + _headerOverhang(header) + 22;
+    final firstStart = _top + bannerH + _headerOverhang(header) + 36;
 
     var page = _SalawatPdfPage(si, first: true);
     pages.add(page);
     var y = firstStart;
+    // الصيغ الأطول من هذا العدد من الأسطر فقط هي التي تُقسَّم على الصفحات
+    const splitMin = 8;
     for (var i = 0; i < paras.length; i++) {
-      var need = paras[i].height;
-      // العنوان لا يبقى وحده في آخر الصفحة
-      if (paras[i].heading && i + 1 < paras.length) {
-        need += gap + paras[i + 1].height;
+      final p = paras[i];
+      final n = p.lines.length;
+      final longPara = !p.heading && n > splitMin;
+      var from = 0;
+      while (from < n) {
+        var before = 0.0;
+        if (page.pieces.isNotEmpty) {
+          before = (paras[i - 1].heading || p.heading) ? gap : divSpace;
+        }
+        final room = _bottom - (y + before);
+        var need = _salawatLinesH(p, from, n);
+        // العنوان لا يبقى وحده في آخر الصفحة: يلزمه تحته أول سطرين على الأقل
+        if (p.heading && i + 1 < paras.length) {
+          final nx = paras[i + 1];
+          need += gap +
+              (nx.lines.length > splitMin
+                  ? _salawatLinesH(nx, 0, math.min(2, nx.lines.length))
+                  : nx.height);
+        }
+        if (need <= room || (page.pieces.isEmpty && !longPara)) {
+          // تتّسع كلها في هذه الصفحة (أو صفحة فارغة وصيغة عادية)
+          y += before + _salawatLinesH(p, from, n);
+          page.pieces.add(_SalawatPiece(i, from, n));
+          from = n;
+        } else if (longPara) {
+          // صيغة طويلة: نضع منها ما يتّسع ونكمل الباقي في الصفحة التالية
+          var fit = 0;
+          var h = 0.0;
+          while (fit < n - from) {
+            final add = p.lines[from + fit].height + (fit > 0 ? p.lineGap : 0);
+            if (h + add > room) break;
+            h += add;
+            fit++;
+          }
+          if ((n - from) - fit == 1 && fit > 2) fit--; // لا يبقى سطر وحيد
+          if (fit < 2 && page.pieces.isNotEmpty) {
+            // لا يتّسع سطران على الأقل هنا: نبدأ صفحة جديدة
+            page = _SalawatPdfPage(si);
+            pages.add(page);
+            y = _top;
+            continue;
+          }
+          if (fit < 1) fit = 1;
+          page.pieces.add(_SalawatPiece(i, from, from + fit));
+          from += fit;
+          page = _SalawatPdfPage(si);
+          pages.add(page);
+          y = _top;
+        } else {
+          // صيغة عادية أو عنوان لا يتّسع: ينتقل لصفحة جديدة
+          page = _SalawatPdfPage(si);
+          pages.add(page);
+          y = _top;
+        }
       }
-      var before = 0.0;
-      if (page.idx.isNotEmpty) {
-        before = (paras[i - 1].heading || paras[i].heading) ? gap : divSpace;
-      }
-      if (page.idx.isNotEmpty && y + before + need > _bottom) {
-        page = _SalawatPdfPage(si);
-        pages.add(page);
-        y = _top;
-        before = 0;
-      }
-      y += before + paras[i].height;
-      page.idx.add(i);
     }
     // الختام في آخر صفحة من القسم، ولو لم يتّسع له مكان يُوضع في صفحة جديدة
     var creditY = y + gap * 1.2;
@@ -3402,10 +3481,11 @@ Future<Uint8List> buildSalawatPdf({
           canvas, Offset(_mx + 30, _top + (L.bannerH - L.titleP.height) / 2));
       py = L.firstStart;
     }
-    for (var k = 0; k < pg.idx.length; k++) {
-      final i = pg.idx[k];
+    for (var k = 0; k < pg.pieces.length; k++) {
+      final pc = pg.pieces[k];
+      final para = L.paras[pc.para];
       if (k > 0) {
-        if (L.paras[i - 1].heading || L.paras[i].heading) {
+        if (L.paras[pg.pieces[k - 1].para].heading || para.heading) {
           py += gap;
         } else {
           py += gap * .6;
@@ -3413,7 +3493,7 @@ Future<Uint8List> buildSalawatPdf({
           py += 16 + gap * .6;
         }
       }
-      py = _paintSalawatPara(canvas, L.paras[i], py);
+      py = _paintSalawatPiece(canvas, para, pc.from, pc.to, py);
     }
     if (pg.hasCredit) {
       _paintSalawatCredit(canvas, credit, theme, pg.creditY);
@@ -3554,7 +3634,7 @@ Future<Uint8List> buildSalawatImage({
 }) async {
   final baseStyle = (Theme.of(context).textTheme.bodyMedium ?? const TextStyle())
       .copyWith(decoration: TextDecoration.none);
-  final iconH = icon > 0 ? 66.0 : 0.0;
+  const iconH = 0.0; // الأيقونة في الركن فلا تحجز مساحة
 
   final titleP = _centeredPainter(
       title,
@@ -3569,7 +3649,9 @@ Future<Uint8List> buildSalawatImage({
   final credit = _salawatCreditPainters(baseStyle, theme);
   final creditH = _salawatCreditHeight(credit);
   var size = items.length == 1 ? 26.0 : (items.length == 2 ? 23.0 : 21.0);
-  const between = 14.0 + 16 + 14; // فاصل زخرفي بين الصيغ
+  // تباعد الأسطر يشمل الفاصل بين الصيغ أيضًا (والخط يصغر تلقائيًا لو زاد المحتوى)
+  final ls = salawatFonts.lineSpacing.value;
+  final between = 14.0 * ls + 16 + 14.0 * ls; // فاصل زخرفي بين الصيغ
   final maxH = _pageH - 2 * 74.0 - iconH;
   var paras = <_SalawatPara>[];
   var contentH = 0.0;
@@ -3597,10 +3679,7 @@ Future<Uint8List> buildSalawatImage({
   canvas.scale(_scale);
   _paintPage(canvas, theme, paper, frame, pattern);
 
-  if (icon > 0) {
-    _paintIcon(canvas, theme, icon, Offset(_pageW / 2, y + 30), 52);
-    y += iconH;
-  }
+  _paintCornerIcon(canvas, theme, icon);
   canvas.drawPath(
       _pdfStar(Offset(_pageW / 2, y + 12), 12), Paint()..color = theme.accent);
   y += 24 + 12;
@@ -3610,9 +3689,9 @@ Future<Uint8List> buildSalawatImage({
   y += 16 + 28;
   for (var i = 0; i < paras.length; i++) {
     if (i > 0) {
-      y += 14;
+      y += 14 * ls;
       _divider(canvas, _pageW / 2, y + 8, _avail * .35, theme.accent);
-      y += 16 + 14;
+      y += 16 + 14 * ls;
     }
     y = _paintSalawatPara(canvas, paras[i], y);
   }
@@ -3934,7 +4013,7 @@ class _DPoem {
   final List<double> hv;
   _DPoem(this.title, this.bannerH, this.overhang, this.sadr, this.ajz,
       this.gapV, this.gap, this.hv);
-  double get titleH => bannerH + overhang + 8;
+  double get titleH => bannerH + overhang + 22;
 }
 
 class _DiwanCancelled implements Exception {}
@@ -4094,7 +4173,8 @@ Future<Uint8List> buildDiwanPdf({
       sadr.add(hemistich(justifyHemistich(displayText(v.sadr), style, hw)));
       ajz.add(hemistich(justifyHemistich(displayText(v.ajz), style, hw)));
     }
-    final gapV = size * .45;
+    final ls = poemFonts.lineSpacing.value; // تباعد الأسطر
+    final gapV = size * .45 * ls;
     final hv = [
       for (var i = 0; i < sadr.length; i++)
         sadr[i].height + gapV + ajz[i].height
@@ -4103,7 +4183,7 @@ Future<Uint8List> buildDiwanPdf({
     final tp = centered(poem.title, titleStyle, _avail - 60);
     final bannerH = math.max(tp.height + 28, 58.0);
     laid.add(_DPoem(tp, bannerH, _headerOverhang(header), sadr, ajz, gapV,
-        size * .95, hv));
+        size * .95 * ls, hv));
     onProgress?.call(0.25 * (pi + 1) / poemsList.length);
     if (isCancelled?.call() == true) throw _DiwanCancelled();
     await _uiBreath();
@@ -4168,7 +4248,7 @@ Future<Uint8List> buildDiwanPdf({
           fontWeight: FontWeight.bold)),
       _avail - 60);
   const tocBannerH = 54.0;
-  final tocStart = _top + tocBannerH + headOverhang + 22;
+  final tocStart = _top + tocBannerH + headOverhang + 36;
   const tocGap = 12.0;
   final tocPages = <List<int>>[];
   if (showToc) {
@@ -4314,7 +4394,7 @@ Future<Uint8List> buildDiwanPdf({
             canvas, theme, header, Rect.fromLTWH(_mx, py, _avail, p.bannerH));
         p.title.paint(
             canvas, Offset(_mx + 30, py + (p.bannerH - p.title.height) / 2));
-        py += p.bannerH + p.overhang + 8;
+        py += p.bannerH + p.overhang + 22;
       } else {
         final v = e.$2;
         p.sadr[v].paint(canvas, Offset(_mx + _avail - p.sadr[v].width, py));
@@ -4398,8 +4478,12 @@ Future<Uint8List> buildDiwanPdf({
 }
 
 /// نافذة تصميم الـ PDF ثم إنشاء الديوان كله وحفظه في قسم «الملفات»
-Future<void> showDiwanPdfSheet(
-    BuildContext context, String diwan, List<Poem> list) async {
+/// نافذة تصميم الـ PDF ثم إنشاء ملف الديوان (أو قصائد مختارة منه / من المفضلة).
+/// [selection] = قصائد اختارتها المستخدمة، و[diwan] يكون عنوان الغلاف.
+/// يرجع true لو اتحفظ الملف.
+Future<bool> showDiwanPdfSheet(
+    BuildContext context, String diwan, List<Poem> list,
+    {bool selection = false}) async {
   final messenger = ScaffoldMessenger.of(context);
   void toast(String m) => messenger
     ..hideCurrentSnackBar()
@@ -4408,18 +4492,23 @@ Future<void> showDiwanPdfSheet(
         duration: const Duration(seconds: 3)));
 
   if (list.isEmpty) {
-    toast(isChapterDiwan(diwan)
-        ? 'لا توجد فصول في هذا الديوان'
-        : 'لا توجد قصائد في هذا الديوان');
-    return;
+    toast(selection
+        ? 'اختاري قصيدة واحدة على الأقل'
+        : isChapterDiwan(diwan)
+            ? 'لا توجد فصول في هذا الديوان'
+            : 'لا توجد قصائد في هذا الديوان');
+    return false;
   }
-  final d = await _pickDesign(context, 'تحويل الديوان كله إلى PDF');
-  if (d == null || !context.mounted) return;
+  final d = await _pickDesign(context,
+      selection ? 'تحويل القصائد المختارة إلى PDF' : 'تحويل الديوان كله إلى PDF');
+  if (d == null || !context.mounted) return false;
 
   final bytes = await _runPdfJob(
     context,
     messenger,
-    'جاري إنشاء ملف الديوان (${diwanCountLabel(diwan, list.length)})',
+    selection
+        ? 'جاري إنشاء ملف القصائد المختارة (${arDigits(list.length)} قصيدة)'
+        : 'جاري إنشاء ملف الديوان (${diwanCountLabel(diwan, list.length)})',
     (onProgress, isCancelled) => buildDiwanPdf(
       context: context,
       diwan: diwan,
@@ -4435,13 +4524,21 @@ Future<void> showDiwanPdfSheet(
       isCancelled: isCancelled,
     ),
   );
-  if (bytes == null) return;
+  if (bytes == null) return false;
 
-  final inApp = await SavedFiles.save(SavedKind.pdf, diwan, bytes);
+  final fileTitle =
+      selection && diwanNames.contains(diwan) ? '$diwan (مختارات)' : diwan;
+  final inApp = await SavedFiles.save(SavedKind.pdf, fileTitle, bytes);
   if (inApp != null && context.mounted) {
-    _toastSaved(context, messenger, 'تم حفظ الديوان في قسم «الملفات»',
+    _toastSaved(
+        context,
+        messenger,
+        selection
+            ? 'تم حفظ القصائد المختارة في قسم «الملفات»'
+            : 'تم حفظ الديوان في قسم «الملفات»',
         SavedKind.pdf);
-  } else {
-    toast('تعذّر حفظ الملف');
+    return true;
   }
+  toast('تعذّر حفظ الملف');
+  return false;
 }

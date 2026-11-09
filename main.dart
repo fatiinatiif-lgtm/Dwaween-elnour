@@ -3054,6 +3054,15 @@ class DiwanDetailPage extends StatefulWidget {
 class _DiwanDetailPageState extends State<DiwanDetailPage> {
   final ctrl = TextEditingController();
 
+  // وضع اختيار قصائد لتحويلها إلى ملف PDF
+  bool _selecting = false;
+  final Set<int> _sel = <int>{};
+
+  void _exitSelect() => setState(() {
+        _selecting = false;
+        _sel.clear();
+      });
+
   @override
   void dispose() {
     ctrl.dispose();
@@ -3085,7 +3094,38 @@ class _DiwanDetailPageState extends State<DiwanDetailPage> {
                   ? null
                   : () => showDiwanPdfSheet(context, widget.name, list),
             ),
+            IconButton(
+              tooltip: 'اختيار قصائد لملف PDF',
+              icon: const Icon(Icons.checklist_rounded),
+              onPressed: list.isEmpty
+                  ? null
+                  : () => setState(() {
+                        _selecting = true;
+                        _sel.clear();
+                      }),
+            ),
           ]),
+      bottomNavigationBar: _selecting
+          ? PdfSelectBar(
+              count: _sel.length,
+              onAll: () => setState(() {
+                final all = {for (final e in shown) e.key};
+                if (_sel.containsAll(all)) {
+                  _sel.removeAll(all);
+                } else {
+                  _sel.addAll(all);
+                }
+              }),
+              onCancel: _exitSelect,
+              onCreate: () async {
+                final idx = _sel.toList()..sort();
+                final ok = await showDiwanPdfSheet(
+                    context, widget.name, [for (final i in idx) list[i]],
+                    selection: true);
+                if (ok && mounted) _exitSelect();
+              },
+            )
+          : null,
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
         children: [
@@ -3142,7 +3182,18 @@ class _DiwanDetailPageState extends State<DiwanDetailPage> {
             )
           else
             for (final e in shown)
-              PoemTile(poem: e.value, diwan: widget.name, number: e.key + 1),
+              _selecting
+                  ? SelectablePoemTile(
+                      poem: e.value,
+                      diwan: widget.name,
+                      number: e.key + 1,
+                      selected: _sel.contains(e.key),
+                      onTap: () => setState(() {
+                        if (!_sel.remove(e.key)) _sel.add(e.key);
+                      }),
+                    )
+                  : PoemTile(
+                      poem: e.value, diwan: widget.name, number: e.key + 1),
         ],
       ),
     );
@@ -3340,15 +3391,145 @@ class FavButton extends StatelessWidget {
       );
 }
 
-class FavoritesPage extends StatelessWidget {
+/// قصيدة في وضع الاختيار لملف PDF: الضغط يحدّدها بدل ما يفتحها
+class SelectablePoemTile extends StatelessWidget {
+  final Poem poem;
+  final String diwan;
+  final int? number;
+  final bool selected;
+  final VoidCallback onTap;
+  const SelectablePoemTile({
+    super.key,
+    required this.poem,
+    required this.diwan,
+    this.number,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: Row(
+          children: [
+            Padding(
+              padding: const EdgeInsetsDirectional.only(end: 8),
+              child: Icon(
+                selected
+                    ? Icons.check_circle_rounded
+                    : Icons.radio_button_unchecked_rounded,
+                size: 28,
+                color: selected ? accentGold : brown.withOpacity(.55),
+              ),
+            ),
+            Expanded(
+              child: IgnorePointer(
+                  child: PoemTile(poem: poem, diwan: diwan, number: number)),
+            ),
+          ],
+        ),
+      );
+}
+
+/// شريط أسفل الشاشة في وضع اختيار القصائد (عدد المختار + الكل + إلغاء + إنشاء PDF)
+class PdfSelectBar extends StatelessWidget {
+  final int count;
+  final VoidCallback onAll;
+  final VoidCallback onCancel;
+  final VoidCallback onCreate;
+  final bool safeBottom;
+  const PdfSelectBar({
+    super.key,
+    required this.count,
+    required this.onAll,
+    required this.onCancel,
+    required this.onCreate,
+    this.safeBottom = true,
+  });
+
+  @override
+  Widget build(BuildContext context) => Material(
+        color: cream,
+        elevation: 8,
+        child: SafeArea(
+          top: false,
+          bottom: safeBottom,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(14, 8, 14, 8),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    count == 0
+                        ? 'اضغطي على القصائد لاختيارها'
+                        : 'تم اختيار ${arDigits(count)}',
+                    style: TextStyle(
+                        color: brownDark, fontWeight: FontWeight.w600),
+                  ),
+                ),
+                TextButton(
+                    onPressed: onAll,
+                    child: Text('الكل', style: TextStyle(color: brown))),
+                TextButton(
+                    onPressed: onCancel,
+                    child: Text('إلغاء', style: TextStyle(color: brown))),
+                const SizedBox(width: 6),
+                FilledButton.icon(
+                  style: FilledButton.styleFrom(
+                      backgroundColor: brown, foregroundColor: Colors.white),
+                  onPressed: count == 0 ? null : onCreate,
+                  icon: const Icon(Icons.picture_as_pdf_rounded),
+                  label: const Text('إنشاء PDF'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+}
+
+class FavoritesPage extends StatefulWidget {
   const FavoritesPage({super.key});
+  @override
+  State<FavoritesPage> createState() => _FavoritesPageState();
+}
+
+class _FavoritesPageState extends State<FavoritesPage> {
+  bool _selecting = false;
+  final Set<String> _sel = <String>{}; // مفاتيح القصائد المختارة
+
+  void _exitSelect() => setState(() {
+        _selecting = false;
+        _sel.clear();
+      });
+
+  Future<void> _makePdf(List<(String, Poem)> all) async {
+    final chosen = [
+      for (final e in all)
+        if (_sel.contains(favKey(e.$1, e.$2))) e
+    ];
+    if (chosen.isEmpty) return;
+    // الترتيب في الملف: حسب ترتيب الدواوين ثم ترتيب القصائد داخل كل ديوان
+    chosen.sort((a, b) {
+      final da = diwanNames.indexOf(a.$1);
+      final db = diwanNames.indexOf(b.$1);
+      if (da != db) return da.compareTo(db);
+      final la = poems[a.$1] ?? const <Poem>[];
+      return la.indexOf(a.$2).compareTo(la.indexOf(b.$2));
+    });
+    final ok = await showDiwanPdfSheet(
+        context, 'قصائدي المفضلة', [for (final e in chosen) e.$2],
+        selection: true);
+    if (ok && mounted) _exitSelect();
+  }
 
   @override
   Widget build(BuildContext context) => SafeArea(
         child: ValueListenableBuilder<Set<String>>(
           valueListenable: favorites,
           builder: (context, favs, _) {
-            final items = <Widget>[];
+            final entries = <(String, Poem)>[];
             for (final k in favs.toList().reversed) {
               final parts = k.split('\u0001');
               if (parts.length != 2) continue;
@@ -3356,18 +3537,79 @@ class FavoritesPage extends StatelessWidget {
               if (list == null) continue;
               final idx = list.indexWhere((p) => p.title == parts[1]);
               if (idx < 0) continue;
-              items.add(PoemTile(
-                  key: ValueKey(k), poem: list[idx], diwan: parts[0]));
+              entries.add((parts[0], list[idx]));
             }
-            return ListView(
-              padding: const EdgeInsets.fromLTRB(16, 18, 16, 24),
+            final items = <Widget>[
+              for (final e in entries)
+                _selecting
+                    ? SelectablePoemTile(
+                        key: ValueKey(favKey(e.$1, e.$2)),
+                        poem: e.$2,
+                        diwan: e.$1,
+                        selected: _sel.contains(favKey(e.$1, e.$2)),
+                        onTap: () => setState(() {
+                          final k = favKey(e.$1, e.$2);
+                          if (!_sel.remove(k)) _sel.add(k);
+                        }),
+                      )
+                    : PoemTile(
+                        key: ValueKey(favKey(e.$1, e.$2)),
+                        poem: e.$2,
+                        diwan: e.$1),
+            ];
+            return Column(
               children: [
-                const SectionHeading('المفضلة'),
-                const _NotesEntryCard(),
-                if (items.isEmpty)
-                  const _EmptyFavorites()
-                else
-                  ...items,
+                Expanded(
+                  child: ListView(
+                    padding: const EdgeInsets.fromLTRB(16, 18, 16, 24),
+                    children: [
+                      const SectionHeading('المفضلة'),
+                      const _NotesEntryCard(),
+                      if (entries.isNotEmpty && !_selecting)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 14),
+                          child: FilledButton.icon(
+                            style: FilledButton.styleFrom(
+                                backgroundColor: brown,
+                                foregroundColor: Colors.white,
+                                shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(18),
+                                    side: BorderSide(
+                                        color: accentGold, width: 1.2)),
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 14)),
+                            onPressed: () => setState(() {
+                              _selecting = true;
+                              _sel.clear();
+                            }),
+                            icon: const Icon(Icons.picture_as_pdf_rounded),
+                            label: const Text('اختيار قصائد وتحويلها إلى PDF',
+                                style: TextStyle(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.bold)),
+                          ),
+                        ),
+                      if (items.isEmpty) const _EmptyFavorites() else ...items,
+                    ],
+                  ),
+                ),
+                if (_selecting)
+                  PdfSelectBar(
+                    safeBottom: false,
+                    count: _sel.length,
+                    onAll: () => setState(() {
+                      final all = {
+                        for (final e in entries) favKey(e.$1, e.$2)
+                      };
+                      if (_sel.containsAll(all)) {
+                        _sel.removeAll(all);
+                      } else {
+                        _sel.addAll(all);
+                      }
+                    }),
+                    onCancel: _exitSelect,
+                    onCreate: () => _makePdf(entries),
+                  ),
               ],
             );
           },
@@ -5214,6 +5456,7 @@ class _PoemBodyState extends State<PoemBody> {
             _key = key;
           }
           final gap = _size * 0.95;
+          final ls = poemFonts.lineSpacing.value; // تباعد الأسطر
           // أول بيت فيه تمييز: ننزل إليه مرة واحدة عند فتح القصيدة
           final firstMatch = _lines.indexWhere(
               (l) => l.sadrHl.isNotEmpty || l.ajzHl.isNotEmpty);
@@ -5237,7 +5480,7 @@ class _PoemBodyState extends State<PoemBody> {
                     // الصدر: يبدأ من أقصى اليمين
                     _hemistich(_lines[i].sadr, Alignment.centerRight,
                         _lines[i].sadrHl),
-                    SizedBox(height: _size * 0.45),
+                    SizedBox(height: _size * 0.45 * ls),
                     // العجز: تحته مباشرة، مزاح 8 مسافات لليسار
                     _hemistich(_lines[i].ajz, Alignment.centerLeft,
                         _lines[i].ajzHl),
@@ -5245,7 +5488,7 @@ class _PoemBodyState extends State<PoemBody> {
                 ),
                 if (i < _lines.length - 1)
                   Padding(
-                    padding: EdgeInsets.symmetric(vertical: gap * 0.6),
+                    padding: EdgeInsets.symmetric(vertical: gap * 0.6 * ls),
                     child: const OrnamentDivider(),
                   )
                 else
@@ -5778,6 +6021,53 @@ class FontSettingsPage extends StatelessWidget {
               },
             ),
 
+            // ── تباعد الأسطر ──
+            _title('تباعد الأسطر'),
+            ListenableBuilder(
+              listenable: f.lineSpacing,
+              builder: (_, __) {
+                final v = f.lineSpacing.value;
+                double step(double x) => double.parse(
+                    x.clamp(minLineSpacing, maxLineSpacing).toStringAsFixed(1));
+                return Row(
+                  children: [
+                    Expanded(
+                      child: FilledButton.icon(
+                        style: FilledButton.styleFrom(
+                            backgroundColor: brown,
+                            padding: const EdgeInsets.symmetric(vertical: 14)),
+                        onPressed: v > minLineSpacing + .01
+                            ? () => f.lineSpacing.value = step(v - .1)
+                            : null,
+                        icon: const Icon(Icons.density_small_rounded),
+                        label: const Text('تقليل'),
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Text('${arDigits((v * 100).round())}٪',
+                          style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                              color: brown)),
+                    ),
+                    Expanded(
+                      child: FilledButton.icon(
+                        style: FilledButton.styleFrom(
+                            backgroundColor: brown,
+                            padding: const EdgeInsets.symmetric(vertical: 14)),
+                        onPressed: v < maxLineSpacing - .01
+                            ? () => f.lineSpacing.value = step(v + .1)
+                            : null,
+                        icon: const Icon(Icons.density_large_rounded),
+                        label: const Text('زيادة'),
+                      ),
+                    ),
+                  ],
+                );
+              },
+            ),
+
             // ── نوع الخط ──
             _title('نوع الخط'),
             ListenableBuilder(
@@ -5908,10 +6198,12 @@ class FontSet {
   final ValueNotifier<int> familyIndex = ValueNotifier<int>(0);
   final ValueNotifier<int> weightIndex = ValueNotifier<int>(0);
   final ValueNotifier<bool> noTashkeel = ValueNotifier<bool>(false);
+  final ValueNotifier<double> lineSpacing = ValueNotifier<double>(1.0);
   FontSet(this.prefix, {required this.tashkeelKey});
 
   late final Listenable listenable =
-      Listenable.merge([size, color, weightIndex, familyIndex, noTashkeel]);
+      Listenable.merge(
+          [size, color, weightIndex, familyIndex, noTashkeel, lineSpacing]);
 
   TextStyle withFont(TextStyle s) =>
       applyFontChoice(fontChoices[familyIndex.value], s);
@@ -5990,7 +6282,11 @@ final ValueNotifier<bool> removeTashkeel = poemFonts.noTashkeel;
 final Listenable poemSettings = poemFonts.listenable;
 
 const double minPoemFont = 16;
-const double maxPoemFont = 30;
+const double maxPoemFont = 40;
+
+/// تباعد الأسطر: معامل يضرب في المسافات الرأسية (١٠٠٪ = الوضع المعتاد)
+const double minLineSpacing = 0.6;
+const double maxLineSpacing = 2.0;
 
 class ColorChoice {
   final String label;
@@ -6061,7 +6357,14 @@ void _loadFontSet(SharedPreferences p, FontSet f, {FontSet? fallback}) {
     f.noTashkeel.value = fallback.noTashkeel.value;
   }
 
+  final ls = p.getDouble('${k}LineSpacing');
+  if (ls != null) {
+    f.lineSpacing.value = ls.clamp(minLineSpacing, maxLineSpacing).toDouble();
+  }
+
   f.size.addListener(() => p.setDouble('${k}FontSize', f.size.value));
+  f.lineSpacing
+      .addListener(() => p.setDouble('${k}LineSpacing', f.lineSpacing.value));
   f.color.addListener(() {
     final i = colorChoices.indexWhere((c) => c.color == f.color.value);
     if (i >= 0) p.setInt('${k}FontColorIndex', i);
