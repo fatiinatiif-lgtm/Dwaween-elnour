@@ -3433,7 +3433,50 @@ class SettingsPage extends StatelessWidget {
                       ),
                       const SizedBox(width: 14),
                       const Expanded(
-                        child: Text('إعدادات الخط',
+                        child: Text('إعدادات خط القصائد',
+                            style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 17,
+                                fontWeight: FontWeight.bold)),
+                      ),
+                      Icon(Icons.chevron_left_rounded,
+                          color: accentGold, size: 28),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Material(
+              color: brown,
+              borderRadius: BorderRadius.circular(18),
+              elevation: 2,
+              clipBehavior: Clip.antiAlias,
+              child: InkWell(
+                onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) =>
+                            const FontSettingsPage(salawat: true))),
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 44,
+                        height: 44,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: accentGold.withOpacity(.2),
+                          border: Border.all(color: accentGold),
+                        ),
+                        child: Icon(Icons.auto_awesome_rounded,
+                            color: accentGold, size: 26),
+                      ),
+                      const SizedBox(width: 14),
+                      const Expanded(
+                        child: Text('إعدادات خط الصلوات',
                             style: TextStyle(
                                 color: Colors.white,
                                 fontSize: 17,
@@ -4083,7 +4126,11 @@ const _sample = Poem('معاينة', [
 ]);
 
 class FontSettingsPage extends StatelessWidget {
-  const FontSettingsPage({super.key});
+  /// salawat = true: إعدادات خط الصلوات (مستقلة عن القصائد)
+  final bool salawat;
+  const FontSettingsPage({super.key, this.salawat = false});
+
+  FontSet get f => salawat ? salawatFonts : poemFonts;
 
   Widget _title(String t) => Padding(
         padding: const EdgeInsets.only(top: 22, bottom: 10),
@@ -4149,7 +4196,7 @@ class FontSettingsPage extends StatelessWidget {
                   separatorBuilder: (_, __) => const Divider(height: 1),
                   itemBuilder: (_, i) {
                     final c = fontChoices[i];
-                    final sel = poemFontFamilyIndex.value == i;
+                    final sel = f.familyIndex.value == i;
                     return ListTile(
                       title: Text(c.label,
                           style: TextStyle(
@@ -4165,12 +4212,12 @@ class FontSettingsPage extends StatelessWidget {
                                   fontSize: 22,
                                   height: 1.6,
                                   color: ink,
-                                  fontWeight: poemFontWeight))),
+                                  fontWeight: f.weight))),
                       trailing: sel
                           ? Icon(Icons.check_circle, color: brown)
                           : null,
                       onTap: () {
-                        poemFontFamilyIndex.value = i;
+                        f.familyIndex.value = i;
                         Navigator.pop(ctx);
                       },
                     );
@@ -4199,7 +4246,7 @@ class FontSettingsPage extends StatelessWidget {
               for (final c in colorChoices)
                 GestureDetector(
                   onTap: () {
-                    poemFontColor.value = c.color;
+                    f.color.value = c.color;
                     Navigator.pop(ctx);
                   },
                   child: Column(
@@ -4208,7 +4255,7 @@ class FontSettingsPage extends StatelessWidget {
                       CircleAvatar(
                         radius: 26,
                         backgroundColor: c.color,
-                        child: poemFontColor.value == c.color
+                        child: f.color.value == c.color
                             ? const Icon(Icons.check, color: Colors.white)
                             : null,
                       ),
@@ -4227,18 +4274,21 @@ class FontSettingsPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Scaffold(
         appBar: AppBar(
-            title: const Text('إعدادات الخط', style: TextStyle(fontSize: 17))),
+            title: Text(salawat ? 'إعدادات خط الصلوات' : 'إعدادات خط القصائد',
+                style: const TextStyle(fontSize: 17))),
         body: ListView(
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 30),
           children: [
-            const PoemFrame(child: PoemBody(poem: _sample)),
+            salawat
+                ? const PoemFrame(child: SalawatSample())
+                : const PoemFrame(child: PoemBody(poem: _sample)),
 
             // ── حجم الخط ──
             _title('حجم الخط'),
             ListenableBuilder(
-              listenable: poemFontSize,
+              listenable: f.size,
               builder: (_, __) {
-                final v = poemFontSize.value;
+                final v = f.size.value;
                 return Row(
                   children: [
                     Expanded(
@@ -4247,7 +4297,7 @@ class FontSettingsPage extends StatelessWidget {
                             backgroundColor: brown,
                             padding: const EdgeInsets.symmetric(vertical: 14)),
                         onPressed: v > minPoemFont
-                            ? () => poemFontSize.value =
+                            ? () => f.size.value =
                                 (v - 1).clamp(minPoemFont, maxPoemFont).toDouble()
                             : null,
                         icon: const Icon(Icons.remove_rounded),
@@ -4268,7 +4318,7 @@ class FontSettingsPage extends StatelessWidget {
                             backgroundColor: brown,
                             padding: const EdgeInsets.symmetric(vertical: 14)),
                         onPressed: v < maxPoemFont
-                            ? () => poemFontSize.value =
+                            ? () => f.size.value =
                                 (v + 1).clamp(minPoemFont, maxPoemFont).toDouble()
                             : null,
                         icon: const Icon(Icons.add_rounded),
@@ -4283,12 +4333,12 @@ class FontSettingsPage extends StatelessWidget {
             // ── نوع الخط ──
             _title('نوع الخط'),
             ListenableBuilder(
-              listenable: poemFontFamilyIndex,
+              listenable: f.familyIndex,
               builder: (_, __) => _optionButton(
                 icon: Icons.font_download_rounded,
                 title: 'اختيار نوع الخط',
                 trailing: Text(
-                    fontChoices[poemFontFamilyIndex.value].label,
+                    fontChoices[f.familyIndex.value].label,
                     style: TextStyle(fontSize: 13, color: brown)),
                 onTap: () => _pickFont(context),
               ),
@@ -4297,12 +4347,12 @@ class FontSettingsPage extends StatelessWidget {
             // ── لون الخط ──
             _title('لون الخط'),
             ListenableBuilder(
-              listenable: poemFontColor,
+              listenable: f.color,
               builder: (_, __) => _optionButton(
                 icon: Icons.palette_rounded,
                 title: 'اختيار لون الخط',
                 trailing: CircleAvatar(
-                    radius: 11, backgroundColor: poemFontColor.value),
+                    radius: 11, backgroundColor: f.color.value),
                 onTap: () => _pickColor(context),
               ),
             ),
@@ -4310,9 +4360,9 @@ class FontSettingsPage extends StatelessWidget {
             // ── سُمك الخط ──
             _title('سُمك الخط'),
             ListenableBuilder(
-              listenable: poemFontWeightIndex,
+              listenable: f.weightIndex,
               builder: (_, __) {
-                final sel = poemFontWeightIndex.value;
+                final sel = f.weightIndex.value;
                 return Row(
                   children: [
                     for (var i = 0; i < weightChoices.length; i++) ...[
@@ -4335,7 +4385,7 @@ class FontSettingsPage extends StatelessWidget {
                                     padding: const EdgeInsets.symmetric(
                                         vertical: 14)),
                                 onPressed: () =>
-                                    poemFontWeightIndex.value = i,
+                                    f.weightIndex.value = i,
                                 child: Text(weightChoices[i].label,
                                     style: TextStyle(
                                         fontWeight: weightChoices[i].weight))),
@@ -4349,9 +4399,9 @@ class FontSettingsPage extends StatelessWidget {
             // ── التشكيل ──
             _title('التشكيل'),
             ListenableBuilder(
-              listenable: removeTashkeel,
+              listenable: f.noTashkeel,
               builder: (_, __) {
-                final off = removeTashkeel.value;
+                final off = f.noTashkeel.value;
                 ButtonStyle filled() => FilledButton.styleFrom(
                     backgroundColor: brown,
                     padding: const EdgeInsets.symmetric(vertical: 14));
@@ -4369,7 +4419,7 @@ class FontSettingsPage extends StatelessWidget {
                               child: const Text('إزالة التشكيل'))
                           : OutlinedButton(
                               style: outlined(),
-                              onPressed: () => removeTashkeel.value = true,
+                              onPressed: () => f.noTashkeel.value = true,
                               child: const Text('إزالة التشكيل')),
                     ),
                     const SizedBox(width: 12),
@@ -4381,7 +4431,7 @@ class FontSettingsPage extends StatelessWidget {
                               child: const Text('التشكيل كما هو'))
                           : OutlinedButton(
                               style: outlined(),
-                              onPressed: () => removeTashkeel.value = false,
+                              onPressed: () => f.noTashkeel.value = false,
                               child: const Text('التشكيل كما هو')),
                     ),
                   ],
@@ -4399,15 +4449,43 @@ class FontSettingsPage extends StatelessWidget {
 
 // ───────────── إعدادات الخط (تُحفظ على الهاتف) ─────────────
 
+/// مجموعة إعدادات خط كاملة (حجم / لون / نوع / سُمك / تشكيل) تُحفظ بمفاتيح خاصة بها.
+/// عندنا مجموعتان مستقلتان: القصائد [poemFonts] والصلوات [salawatFonts].
+class FontSet {
+  final String prefix; // بادئة مفاتيح الحفظ على الهاتف
+  final String tashkeelKey;
+  final ValueNotifier<double> size = ValueNotifier<double>(22);
+  final ValueNotifier<Color> color =
+      ValueNotifier<Color>(const Color(0xFF3E2723));
+  final ValueNotifier<int> familyIndex = ValueNotifier<int>(0);
+  final ValueNotifier<int> weightIndex = ValueNotifier<int>(0);
+  final ValueNotifier<bool> noTashkeel = ValueNotifier<bool>(false);
+  FontSet(this.prefix, {required this.tashkeelKey});
+
+  late final Listenable listenable =
+      Listenable.merge([size, color, weightIndex, familyIndex, noTashkeel]);
+
+  TextStyle withFont(TextStyle s) =>
+      applyFontChoice(fontChoices[familyIndex.value], s);
+  FontWeight get weight => weightChoices[weightIndex.value].weight;
+  String display(String s) => noTashkeel.value ? stripTashkeel(s) : s;
+}
+
+/// إعدادات خط القصائد (كما كانت تمامًا)
+final FontSet poemFonts = FontSet('poem', tashkeelKey: 'removeTashkeel');
+
+/// إعدادات خط الصلوات (مستقلة عن القصائد)
+final FontSet salawatFonts =
+    FontSet('salawat', tashkeelKey: 'salawatRemoveTashkeel');
+
 /// حجم خط القصيدة
-final ValueNotifier<double> poemFontSize = ValueNotifier<double>(22);
+final ValueNotifier<double> poemFontSize = poemFonts.size;
 
 /// لون خط القصيدة
-final ValueNotifier<Color> poemFontColor =
-    ValueNotifier<Color>(const Color(0xFF3E2723));
+final ValueNotifier<Color> poemFontColor = poemFonts.color;
 
 /// نوع خط القصيدة (فهرس في fontChoices، 0 = الخط الافتراضي)
-final ValueNotifier<int> poemFontFamilyIndex = ValueNotifier<int>(0);
+final ValueNotifier<int> poemFontFamilyIndex = poemFonts.familyIndex;
 
 class FontChoice {
   final String label;
@@ -4441,7 +4519,7 @@ TextStyle withPoemFont(TextStyle s) =>
     applyFontChoice(fontChoices[poemFontFamilyIndex.value], s);
 
 /// سُمك خط القصيدة (فهرس في weightChoices)
-final ValueNotifier<int> poemFontWeightIndex = ValueNotifier<int>(0);
+final ValueNotifier<int> poemFontWeightIndex = poemFonts.weightIndex;
 
 class WeightChoice {
   final String label;
@@ -4458,10 +4536,10 @@ const weightChoices = [
 FontWeight get poemFontWeight => weightChoices[poemFontWeightIndex.value].weight;
 
 /// true = بدون تشكيل، false = التشكيل كما هو
-final ValueNotifier<bool> removeTashkeel = ValueNotifier<bool>(false);
+final ValueNotifier<bool> removeTashkeel = poemFonts.noTashkeel;
 
 /// يتغيّر عند تغيّر أي إعداد
-final Listenable poemSettings = Listenable.merge([poemFontSize, poemFontColor, poemFontWeightIndex, poemFontFamilyIndex, removeTashkeel]);
+final Listenable poemSettings = poemFonts.listenable;
 
 const double minPoemFont = 16;
 const double maxPoemFont = 30;
@@ -4493,39 +4571,66 @@ String stripTashkeel(String s) => s.replaceAll(_tashkeelRe, '');
 /// النص كما يجب أن يظهر حسب إعداد التشكيل
 String displayText(String s) => removeTashkeel.value ? stripTashkeel(s) : s;
 
+// ───────────── اختصارات خط الصلوات ─────────────
+TextStyle withSalawatFont(TextStyle s) => salawatFonts.withFont(s);
+FontWeight get salawatFontWeight => salawatFonts.weight;
+String salawatDisplayText(String s) => salawatFonts.display(s);
+
 // ───────────── الحفظ والاسترجاع ─────────────
+/// يقرأ إعدادات مجموعة خط من الهاتف ويبدأ حفظ أي تغيير فيها.
+/// [fallback]: لو لم يوجد حفظ سابق للمجموعة تبدأ بقيم المجموعة الأخرى
+/// (فلا يتغيّر شكل الصلوات عند أول تشغيل بعد التحديث).
+void _loadFontSet(SharedPreferences p, FontSet f, {FontSet? fallback}) {
+  final k = f.prefix;
+  final size = p.getDouble('${k}FontSize');
+  if (size != null) {
+    f.size.value = size.clamp(minPoemFont, maxPoemFont).toDouble();
+  } else if (fallback != null) {
+    f.size.value = fallback.size.value;
+  }
+  final ci = p.getInt('${k}FontColorIndex');
+  if (ci != null && ci >= 0 && ci < colorChoices.length) {
+    f.color.value = colorChoices[ci].color;
+  } else if (fallback != null) {
+    f.color.value = fallback.color.value;
+  }
+  final wi = p.getInt('${k}FontWeightIndex');
+  if (wi != null && wi >= 0 && wi < weightChoices.length) {
+    f.weightIndex.value = wi;
+  } else if (fallback != null) {
+    f.weightIndex.value = fallback.weightIndex.value;
+  }
+  final fi = p.getInt('${k}FontFamilyIndex');
+  if (fi != null && fi >= 0 && fi < fontChoices.length) {
+    f.familyIndex.value = fi;
+  } else if (fallback != null) {
+    f.familyIndex.value = fallback.familyIndex.value;
+  }
+  final tk = p.getBool(f.tashkeelKey);
+  if (tk != null) {
+    f.noTashkeel.value = tk;
+  } else if (fallback != null) {
+    f.noTashkeel.value = fallback.noTashkeel.value;
+  }
+
+  f.size.addListener(() => p.setDouble('${k}FontSize', f.size.value));
+  f.color.addListener(() {
+    final i = colorChoices.indexWhere((c) => c.color == f.color.value);
+    if (i >= 0) p.setInt('${k}FontColorIndex', i);
+  });
+  f.familyIndex
+      .addListener(() => p.setInt('${k}FontFamilyIndex', f.familyIndex.value));
+  f.weightIndex
+      .addListener(() => p.setInt('${k}FontWeightIndex', f.weightIndex.value));
+  f.noTashkeel
+      .addListener(() => p.setBool(f.tashkeelKey, f.noTashkeel.value));
+}
+
 Future<void> loadFontSettings() async {
   try {
     final p = await SharedPreferences.getInstance();
-    final size = p.getDouble('poemFontSize');
-    if (size != null) {
-      poemFontSize.value = size.clamp(minPoemFont, maxPoemFont).toDouble();
-    }
-    final ci = p.getInt('poemFontColorIndex');
-    if (ci != null && ci >= 0 && ci < colorChoices.length) {
-      poemFontColor.value = colorChoices[ci].color;
-    }
-    final wi = p.getInt('poemFontWeightIndex');
-    if (wi != null && wi >= 0 && wi < weightChoices.length) {
-      poemFontWeightIndex.value = wi;
-    }
-    final fi = p.getInt('poemFontFamilyIndex');
-    if (fi != null && fi >= 0 && fi < fontChoices.length) {
-      poemFontFamilyIndex.value = fi;
-    }
-    removeTashkeel.value = p.getBool('removeTashkeel') ?? false;
-
-    poemFontSize.addListener(() => p.setDouble('poemFontSize', poemFontSize.value));
-    poemFontColor.addListener(() {
-      final i = colorChoices.indexWhere((c) => c.color == poemFontColor.value);
-      if (i >= 0) p.setInt('poemFontColorIndex', i);
-    });
-    poemFontFamilyIndex
-        .addListener(() => p.setInt('poemFontFamilyIndex', poemFontFamilyIndex.value));
-    poemFontWeightIndex
-        .addListener(() => p.setInt('poemFontWeightIndex', poemFontWeightIndex.value));
-    removeTashkeel
-        .addListener(() => p.setBool('removeTashkeel', removeTashkeel.value));
+    _loadFontSet(p, poemFonts);
+    _loadFontSet(p, salawatFonts, fallback: poemFonts);
   } catch (_) {
     // لو فشل الحفظ يشتغل التطبيق بالإعدادات الافتراضية
   }

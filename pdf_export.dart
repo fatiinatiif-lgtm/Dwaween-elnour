@@ -1294,9 +1294,11 @@ typedef _Design = ({
 
 /// نافذة اختيار التصميم (الإطار والنقوش والترويسة والألوان) مع معاينة حيّة.
 /// ترجع null لو أُغلقت النافذة بدون إنشاء.
-Future<_Design?> _pickDesign(BuildContext context, String heading) async {
+Future<_Design?> _pickDesign(BuildContext context, String heading,
+    {Color? initialText}) async {
   var themeI = 0;
-  var textI = colorChoices.indexWhere((c) => c.color == poemFontColor.value);
+  var textI = colorChoices
+      .indexWhere((c) => c.color == (initialText ?? poemFontColor.value));
   if (textI < 0) textI = 0;
   var paperI = 0;
   var frameI = 0;
@@ -2051,7 +2053,7 @@ _SalawatPara _makeSalawatPara(
   if (b.heading) {
     final tp = TextPainter(
       text: TextSpan(
-        text: displayText(b.text),
+        text: salawatDisplayText(b.text),
         style: style.copyWith(
             color: theme.dark,
             fontWeight: FontWeight.bold,
@@ -2064,7 +2066,7 @@ _SalawatPara _makeSalawatPara(
     )..layout(minWidth: hw, maxWidth: hw);
     return _SalawatPara(true, [tp], 0);
   }
-  var t = displayText(b.text);
+  var t = salawatDisplayText(b.text);
   if (b.number != null) t = '(${arDigits(b.number!)}) $t';
   final lines = salawatBreakLines(t, style, hw);
   final painters = <TextPainter>[];
@@ -2093,6 +2095,38 @@ double _paintSalawatPara(Canvas canvas, _SalawatPara p, double y) {
   return py;
 }
 
+/// سطرا «كلمات / شاعر رسول الله ﷺ» و«عبدالرحمن مصطفى الأزهري»
+(TextPainter, TextPainter) _salawatCreditPainters(
+    TextStyle base, PdfTheme theme) {
+  final s1 = withSalawatFont(base.merge(TextStyle(
+      color: Color.lerp(theme.accent, Colors.black, .35),
+      fontSize: 13,
+      height: 1.5,
+      fontWeight: FontWeight.w600)));
+  final s2 = withSalawatFont(base.merge(TextStyle(
+      color: theme.dark,
+      fontSize: 16,
+      height: 1.5,
+      fontWeight: FontWeight.bold)));
+  return (
+    _centeredPainter(kSalawatCredit1, s1, _avail),
+    _centeredPainter(kSalawatCredit2, s2, _avail),
+  );
+}
+
+/// يرسم الختام (فاصل + السطرين) من الإحداثي [y]
+void _paintSalawatCredit(Canvas canvas, (TextPainter, TextPainter) c,
+    PdfTheme theme, double y) {
+  _divider(canvas, _pageW / 2, y + 8, _avail * .5, theme.accent);
+  var py = y + 16 + 8;
+  c.$1.paint(canvas, Offset(_mx, py));
+  py += c.$1.height + 2;
+  c.$2.paint(canvas, Offset(_mx, py));
+}
+
+double _salawatCreditHeight((TextPainter, TextPainter) c) =>
+    16 + 8 + c.$1.height + 2 + c.$2.height;
+
 TextPainter _centeredPainter(String text, TextStyle s, double width) =>
     TextPainter(
       text: TextSpan(text: text, style: s),
@@ -2118,14 +2152,18 @@ Future<Uint8List> buildSalawatPdf({
   final baseStyle = (Theme.of(context).textTheme.bodyMedium ?? const TextStyle())
       .copyWith(decoration: TextDecoration.none);
 
-  final size = math.min(poemFontSize.value, 19.0);
-  final style = withPoemFont(baseStyle.merge(TextStyle(
+  // نفس حجم الخط ونوعه وسُمكه وتشكيله كما في التطبيق بالضبط
+  // (فتنكسر الأسطر في الملف مثلما تنكسر في الشاشة)
+  final size = salawatFonts.size.value;
+  final style = withSalawatFont(baseStyle.merge(TextStyle(
     fontSize: size,
     height: 1.0,
     color: textColor,
-    fontWeight: poemFontWeight,
+    fontWeight: salawatFontWeight,
   )));
   const hw = _avail;
+  final credit = _salawatCreditPainters(baseStyle, theme);
+  final creditH = _salawatCreditHeight(credit);
 
   // ضبط كل الصيغ (مع استراحة قصيرة حتى لا تتجمّد دائرة الانتظار)
   final paras = <_SalawatPara>[];
@@ -2180,6 +2218,12 @@ Future<Uint8List> buildSalawatPdf({
     y += before + paras[i].height;
     pages.last.add(i);
   }
+  // الختام في آخر الصفحة الأخيرة، ولو لم يتّسع له مكان يُوضع في صفحة جديدة
+  var creditY = y + gap * 1.2;
+  if (creditY + creditH > _bottom) {
+    pages.add(<int>[]);
+    creditY = _top + 10;
+  }
 
   const scale = 2.5;
   Future<Uint8List> renderPage(int pi, List<int> idx) async {
@@ -2205,6 +2249,9 @@ Future<Uint8List> buildSalawatPdf({
         }
       }
       py = _paintSalawatPara(canvas, paras[i], py);
+    }
+    if (pi == pages.length - 1) {
+      _paintSalawatCredit(canvas, credit, theme, creditY);
     }
 
     final pic = rec.endRecording();
@@ -2236,7 +2283,8 @@ Future<Uint8List> buildSalawatPdf({
 /// نافذة تصميم الـ PDF للقسم كاملًا ثم الإنشاء والحفظ
 Future<void> showSalawatPdfSheet(BuildContext context, SalawatBook book,
     List<SBlock> blocks, String subtitle) async {
-  final d = await _pickDesign(context, 'تحويل القسم إلى PDF');
+  final d = await _pickDesign(context, 'تحويل القسم إلى PDF',
+      initialText: salawatFonts.color.value);
   if (d == null || !context.mounted) return;
 
   final messenger = ScaffoldMessenger.of(context);
@@ -2320,24 +2368,26 @@ Future<Uint8List> buildSalawatImage({
       _avail - 20);
 
   // نصغّر الخط تدريجيًا حتى يتّسع كل المحتوى في الصورة
+  final credit = _salawatCreditPainters(baseStyle, theme);
+  final creditH = _salawatCreditHeight(credit);
   var size = items.length == 1 ? 26.0 : (items.length == 2 ? 23.0 : 21.0);
   const between = 14.0 + 16 + 14; // فاصل زخرفي بين الصيغ
   const maxH = _pageH - 2 * 74.0;
   var paras = <_SalawatPara>[];
   var contentH = 0.0;
   for (var attempt = 0; attempt < 14; attempt++) {
-    final style = withPoemFont(baseStyle.merge(TextStyle(
+    final style = withSalawatFont(baseStyle.merge(TextStyle(
       fontSize: size,
       height: 1.0,
       color: textColor,
-      fontWeight: poemFontWeight,
+      fontWeight: salawatFontWeight,
     )));
     paras = [
       for (final b in items) _makeSalawatPara(b, style, _avail, size, theme)
     ];
     final bodyH = paras.fold<double>(0, (a, p) => a + p.height) +
         (paras.length - 1) * between;
-    contentH = 24 + 12 + titleP.height + 12 + 16 + 28 + bodyH + 24 + 16;
+    contentH = 24 + 12 + titleP.height + 12 + 16 + 28 + bodyH + 24 + 16 + 10 + creditH;
     if (contentH <= maxH || size <= 12) break;
     size = math.max(12, size * .92);
   }
@@ -2364,8 +2414,8 @@ Future<Uint8List> buildSalawatImage({
     }
     y = _paintSalawatPara(canvas, paras[i], y);
   }
-  y += 24;
-  _divider(canvas, _pageW / 2, y + 8, _avail * .5, theme.accent);
+  y += 24 + 10;
+  _paintSalawatCredit(canvas, credit, theme, y);
 
   final pic = rec.endRecording();
   final img = await pic.toImage(
@@ -2380,12 +2430,16 @@ Future<void> _copySalawatText(
     BuildContext context, String title, List<SBlock> items) async {
   final b = StringBuffer();
   for (final x in items) {
-    final t = displayText(x.text);
+    final t = salawatDisplayText(x.text);
     b
       ..writeln(x.number != null ? '(${arDigits(x.number!)}) $t' : t)
       ..writeln();
   }
-  b.write('— $title');
+  b
+    ..writeln('— $title')
+    ..writeln()
+    ..writeln(kSalawatCredit1)
+    ..write(kSalawatCredit2);
   await Clipboard.setData(ClipboardData(text: b.toString()));
   if (!context.mounted) return;
   ScaffoldMessenger.of(context)
@@ -2406,7 +2460,8 @@ Future<bool> showSalawatImageSheet(
   var paperI = 0;
   var frameI = 0;
   var patI = 0;
-  var textI = colorChoices.indexWhere((c) => c.color == poemFontColor.value);
+  var textI =
+      colorChoices.indexWhere((c) => c.color == salawatFonts.color.value);
   if (textI < 0) textI = 0;
   Future<Uint8List>? fut;
   var done = false;

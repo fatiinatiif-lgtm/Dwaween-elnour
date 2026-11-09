@@ -20,6 +20,11 @@ enum SalawatKind {
   munajat, // مناجاة: سطور قصيرة تُدمج في فقرة واحدة متصلة
 }
 
+/// سطرا الختام اللذان يظهران أسفل كل قسم (في التطبيق والنسخ والـ PDF والصورة)
+const String kSalawatCredit1 = 'كلمات / شاعر رسول الله ﷺ';
+const String kSalawatCredit2 = 'عبدالرحمن مصطفى الأزهري';
+const String kSalawatCredit = '$kSalawatCredit1\n$kSalawatCredit2';
+
 class SalawatBook {
   final String title;
   final String blurb;
@@ -423,7 +428,7 @@ class _SalawatReadPageState extends State<SalawatReadPage> {
   String get _fullText {
     final b = StringBuffer()..writeln(widget.book.title)..writeln();
     for (final x in _blocks ?? const <SBlock>[]) {
-      final t = displayText(x.text);
+      final t = salawatDisplayText(x.text);
       if (x.heading) {
         b.writeln(t);
       } else if (x.number != null) {
@@ -432,6 +437,7 @@ class _SalawatReadPageState extends State<SalawatReadPage> {
         b..writeln(t)..writeln();
       }
     }
+    b..writeln()..writeln(kSalawatCredit1)..write(kSalawatCredit2);
     return b.toString().trim();
   }
 
@@ -485,6 +491,14 @@ class _SalawatReadPageState extends State<SalawatReadPage> {
         backgroundColor: dc.$1,
         title: Text(book.title, style: const TextStyle(fontSize: 16)),
         actions: [
+          IconButton(
+              tooltip: 'إعدادات خط الصلوات',
+              icon: const Icon(Icons.text_fields_rounded),
+              onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (_) =>
+                          const FontSettingsPage(salawat: true)))),
           IconButton(
               tooltip: 'نسخ النص',
               icon: const Icon(Icons.copy_rounded),
@@ -644,16 +658,16 @@ class _SalawatListState extends State<SalawatList> {
   }
 
   TextStyle _styleFor(BuildContext ctx, double size) =>
-      withPoemFont(DefaultTextStyle.of(ctx).style.merge(TextStyle(
+      withSalawatFont(DefaultTextStyle.of(ctx).style.merge(TextStyle(
             fontSize: size,
             height: 1.0,
-            color: poemInk(poemFontColor.value),
-            fontWeight: poemFontWeight,
+            color: poemInk(salawatFonts.color.value),
+            fontWeight: salawatFontWeight,
           )));
 
   _Laid _layout(SBlock b) {
     if (b.heading) return _Laid(b, const []);
-    var t = displayText(b.text);
+    var t = salawatDisplayText(b.text);
     if (b.number != null) t = '(${arDigits(b.number!)}) $t';
     final lines = salawatBreakLines(t, _style, _w);
     return _Laid(b, [
@@ -712,9 +726,9 @@ class _SalawatListState extends State<SalawatList> {
           const OrnamentDivider(),
           const SizedBox(height: 10),
         ],
-        Text(displayText(t),
+        Text(salawatDisplayText(t),
             textAlign: TextAlign.center,
-            style: withPoemFont(TextStyle(
+            style: withSalawatFont(TextStyle(
                 color: p.dark ? p.ink : p.primary,
                 fontSize: _size * .95,
                 height: 1.3,
@@ -778,15 +792,46 @@ class _SalawatListState extends State<SalawatList> {
     return Column(children: kids);
   }
 
+  /// «كلمات / شاعر رسول الله ﷺ — عبدالرحمن مصطفى الأزهري» في آخر القسم
+  Widget _credit() {
+    final p = currentPalette;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(0, 6, 0, 8),
+      child: Column(
+        children: [
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 60),
+            child: OrnamentDivider(),
+          ),
+          const SizedBox(height: 12),
+          Text(kSalawatCredit1,
+              textAlign: TextAlign.center,
+              style: withSalawatFont(TextStyle(
+                  color: p.dark ? p.inkSoft : p.accent,
+                  fontSize: math.max(15, _size * .72),
+                  height: 1.6,
+                  fontWeight: FontWeight.w600))),
+          Text(kSalawatCredit2,
+              textAlign: TextAlign.center,
+              style: withSalawatFont(TextStyle(
+                  color: p.dark ? p.ink : p.primary,
+                  fontSize: math.max(17, _size * .85),
+                  height: 1.6,
+                  fontWeight: FontWeight.bold))),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      listenable: poemSettings,
+      listenable: salawatFonts.listenable,
       builder: (ctx, _) => LayoutBuilder(
         builder: (ctx, c) {
-          final base = poemFontSize.value;
+          final base = salawatFonts.size.value;
           final key =
-              '${c.maxWidth.toStringAsFixed(1)}|$base|${poemFontColor.value}|${poemFontWeightIndex.value}|${poemFontFamilyIndex.value}|${removeTashkeel.value}|${appDarkMode.value}';
+              '${c.maxWidth.toStringAsFixed(1)}|$base|${salawatFonts.color.value}|${salawatFonts.weightIndex.value}|${salawatFonts.familyIndex.value}|${salawatFonts.noTashkeel.value}|${appDarkMode.value}';
           if (key != _key) {
             _key = key;
             _gen++;
@@ -800,8 +845,9 @@ class _SalawatListState extends State<SalawatList> {
           return ListView.builder(
             padding: const EdgeInsets.fromLTRB(14, 18, 14, 30),
             cacheExtent: 900,
-            itemCount: pages + 1,
+            itemCount: pages + 2,
             itemBuilder: (ctx, i) {
+              if (i == pages + 1) return _credit();
               if (i == 0) {
                 return Padding(
                   padding: const EdgeInsets.only(bottom: 16),
@@ -821,4 +867,79 @@ class _SalawatListState extends State<SalawatList> {
       ),
     );
   }
+}
+
+
+// ───────────── معاينة إعدادات خط الصلوات (نفس ضبط الأسطر الفعلي) ─────────────
+
+class SalawatSample extends StatelessWidget {
+  const SalawatSample({super.key});
+
+  static const _samples = <(int, String)>[
+    (
+      1,
+      'اللَّهُمَّ صَلِّ وَسَلِّمْ وَبَارِكْ عَلَى سَيِّدِنَا مُحَمَّدٍ وَعَلَى آلِهِ وَصَحْبِهِ أَجْمَعِينَ'
+    ),
+    (2, 'الصَّلَاةُ وَالسَّلَامُ عَلَيْكَ يَا رَسُولَ اللَّهِ'),
+  ];
+
+  @override
+  Widget build(BuildContext context) => ListenableBuilder(
+        listenable: salawatFonts.listenable,
+        builder: (ctx, _) => LayoutBuilder(
+          builder: (ctx, c) {
+            final w = c.maxWidth;
+            final size = salawatFonts.size.value;
+            final st = withSalawatFont(DefaultTextStyle.of(ctx).style.merge(
+                TextStyle(
+                    fontSize: size,
+                    height: 1.0,
+                    color: poemInk(salawatFonts.color.value),
+                    fontWeight: salawatFontWeight)));
+            final kids = <Widget>[];
+            for (var i = 0; i < _samples.length; i++) {
+              if (i > 0) {
+                kids.add(Padding(
+                  padding: EdgeInsets.symmetric(vertical: size * .6),
+                  child: const OrnamentDivider(),
+                ));
+              }
+              final (n, raw) = _samples[i];
+              final t = '(${arDigits(n)}) ${salawatDisplayText(raw)}';
+              final lines = salawatBreakLines(t, st, w);
+              for (var k = 0; k < lines.length; k++) {
+                final j = justifyHemistich(lines[k], st, w,
+                    maxPerSlot: 16, maxWordSpacing: 24);
+                InlineSpan span = TextSpan(text: j.text);
+                final sp = j.text.indexOf(' ');
+                if (k == 0 && sp > 0) {
+                  span = TextSpan(children: [
+                    TextSpan(
+                        text: j.text.substring(0, sp),
+                        style: TextStyle(color: currentPalette.accent)),
+                    TextSpan(text: j.text.substring(sp)),
+                  ]);
+                }
+                if (k > 0) kids.add(SizedBox(height: size * .62));
+                kids.add(SizedBox(
+                  width: w,
+                  child: Text.rich(
+                    span,
+                    textDirection: TextDirection.rtl,
+                    textAlign: TextAlign.right,
+                    textScaler: TextScaler.noScaling,
+                    maxLines: j.fits ? 1 : null,
+                    softWrap: !j.fits,
+                    overflow: TextOverflow.visible,
+                    style: st.copyWith(
+                        wordSpacing: j.wordSpacing,
+                        height: j.fits ? 1.0 : 1.7),
+                  ),
+                ));
+              }
+            }
+            return Column(children: kids);
+          },
+        ),
+      );
 }
