@@ -118,9 +118,18 @@ List<SBlock> _parseNumbered(List<String> lines) {
   return out;
 }
 
+/// هل هذا السطر بداية صيغة جديدة؟ (اللهم صل... / وصل وسلم... / الصلاة والسلام عليك...)
+bool _startsFormula(String plain) =>
+    plain.startsWith('اللهم') ||
+    plain.startsWith('وصل') ||
+    plain.startsWith('صل') ||
+    plain.startsWith('الصلاة') ||
+    plain.startsWith('والصلاة') ||
+    plain.startsWith('وسلم');
+
 /// «حرف ...» و«صيغة الحروف...» عناوين.
-/// كل سطر يبدأ بـ «اللهم» يفتح فقرة جديدة، وأسطر «وصلّ وسلّم...» التي بعده
-/// تتصل به في نفس الفقرة (لأن الأسطر القصيرة لا تُضبط بالكشيدة بشكل جميل).
+/// كل سطر يبدأ بـ «اللهم» أو «وصلّ وسلّم» أو «الصلاة والسلام عليك» ... يفتح صيغة
+/// جديدة مستقلة (تحت التي قبلها)، وأي سطر لا يبدأ بذلك يُلحق بالصيغة التي قبله.
 List<SBlock> _parseLetters(List<String> lines) {
   final out = <SBlock>[];
   final cur = StringBuffer();
@@ -138,7 +147,7 @@ List<SBlock> _parseLetters(List<String> lines) {
     if (p.startsWith('حرف ') || p.startsWith('صيغة الحروف')) {
       flush();
       out.add(SBlock(line, heading: true));
-    } else if (p.startsWith('اللهم')) {
+    } else if (_startsFormula(p)) {
       flush();
       cur.write(line);
     } else {
@@ -151,20 +160,9 @@ List<SBlock> _parseLetters(List<String> lines) {
 }
 
 /// سطر العنوان الأول يُتجاهل (العنوان موجود في الترويسة).
-/// أسطر «الصلاة والسلام عليك يا ...» القصيرة تُدمج في فقرة واحدة متصلة،
-/// والأسطر الطويلة (الافتتاح والخاتمة) كل واحد منها فقرة مستقلة.
-const int _shortLineMax = 80; // عدد الحروف (بلا تشكيل) الفاصل بين القصير والطويل
-
+/// كل سطر بعده صيغة مستقلة (الصلاة والسلام عليك يا ... وغيرها) تحت التي قبلها.
 List<SBlock> _parseMunajat(List<String> lines) {
   final out = <SBlock>[];
-  final run = StringBuffer();
-  void flush() {
-    if (run.isNotEmpty) {
-      out.add(SBlock(run.toString().trim()));
-      run.clear();
-    }
-  }
-
   var first = true;
   for (final raw in lines) {
     final line = _clean(raw);
@@ -174,15 +172,8 @@ List<SBlock> _parseMunajat(List<String> lines) {
       first = false;
       if (p.length <= 30 && !p.startsWith('اللهم')) continue; // العنوان
     }
-    if (p.length <= _shortLineMax && p.startsWith('الصلاة والسلام عليك')) {
-      if (run.isNotEmpty) run.write(' ');
-      run.write(line);
-    } else {
-      flush();
-      out.add(SBlock(line));
-    }
+    out.add(SBlock(line));
   }
-  flush();
   return out;
 }
 

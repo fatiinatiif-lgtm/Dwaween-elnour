@@ -1620,10 +1620,7 @@ Future<void> _exportPdf(BuildContext context, Poem poem, String diwan,
 Future<Uint8List> buildVerseImage({
   required BuildContext context,
   required String title,
-  required String sadr,
-  required String ajz,
-  String? sadr2, // بيت ثانٍ اختياري (يظهر تحت الأول)
-  String? ajz2,
+  required List<(String, String)> verses, // من 1 إلى 3 أبيات (صدر، عجز)
   required PdfTheme theme,
   required Color textColor,
   required Color paper,
@@ -1643,14 +1640,12 @@ Future<Uint8List> buildVerseImage({
   double indentOf(TextStyle st) =>
       measureText('ا        ا', st) - measureText('اا', st);
 
-  final hasSecond = sadr2 != null && ajz2 != null;
+  final count = verses.length;
   final texts = [
-    displayText(sadr),
-    displayText(ajz),
-    if (hasSecond) ...[displayText(sadr2!), displayText(ajz2!)],
+    for (final v in verses) ...[displayText(v.$1), displayText(v.$2)],
   ].map((t) => t.trim().replaceAll(RegExp(r'\s+'), ' ')).toList();
 
-  var size = hasSecond ? 24.0 : 26.0;
+  var size = count == 1 ? 26.0 : (count == 2 ? 24.0 : 22.0);
   var st = styleFor(size);
   var w = _avail - indentOf(st);
   for (var i = 0; i < 6; i++) {
@@ -1681,12 +1676,12 @@ Future<Uint8List> buildVerseImage({
         textScaler: TextScaler.noScaling,
       )..layout(minWidth: width, maxWidth: width);
 
-  final sp = hemistich(justifyHemistich(texts[0], style, hw));
-  final aj = hemistich(justifyHemistich(texts[1], style, hw));
-  final sp2 =
-      hasSecond ? hemistich(justifyHemistich(texts[2], style, hw)) : null;
-  final aj2 =
-      hasSecond ? hemistich(justifyHemistich(texts[3], style, hw)) : null;
+  final sp = <TextPainter>[];
+  final aj = <TextPainter>[];
+  for (var i = 0; i < count; i++) {
+    sp.add(hemistich(justifyHemistich(texts[2 * i], style, hw)));
+    aj.add(hemistich(justifyHemistich(texts[2 * i + 1], style, hw)));
+  }
   final titleP = centered(
       title,
       baseStyle.merge(TextStyle(
@@ -1709,11 +1704,14 @@ Future<Uint8List> buildVerseImage({
       _avail);
 
   final gapV = size * .45;
-  const betweenVerses = 14.0 + 16 + 14; // فاصل زخرفي بين البيتين
-  final secondH =
-      hasSecond ? betweenVerses + sp2!.height + gapV + aj2!.height : 0.0;
-  final contentH = 24 + 12 + titleP.height + 12 + 16 + 28 + sp.height + gapV +
-      aj.height + secondH + 28 + 16 + 12 + f1.height + 4 + f2.height;
+  const betweenVerses = 14.0 + 16 + 14; // فاصل زخرفي بين الأبيات
+  var versesH = 0.0;
+  for (var i = 0; i < count; i++) {
+    versesH += sp[i].height + gapV + aj[i].height;
+    if (i > 0) versesH += betweenVerses;
+  }
+  final contentH = 24 + 12 + titleP.height + 12 + 16 + 28 + versesH + 28 + 16 +
+      12 + f1.height + 4 + f2.height;
   var y = math.max(70.0, (_pageH - contentH) / 2);
 
   final rec = ui.PictureRecorder();
@@ -1728,18 +1726,16 @@ Future<Uint8List> buildVerseImage({
   y += titleP.height + 12;
   _divider(canvas, _pageW / 2, y + 8, _avail * .8, theme.accent);
   y += 16 + 28;
-  sp.paint(canvas, Offset(_mx + _avail - sp.width, y));
-  y += sp.height + gapV;
-  aj.paint(canvas, Offset(_mx, y));
-  y += aj.height;
-  if (hasSecond) {
-    y += 14;
-    _divider(canvas, _pageW / 2, y + 8, _avail * .35, theme.accent);
-    y += 16 + 14;
-    sp2!.paint(canvas, Offset(_mx + _avail - sp2.width, y));
-    y += sp2.height + gapV;
-    aj2!.paint(canvas, Offset(_mx, y));
-    y += aj2.height;
+  for (var i = 0; i < count; i++) {
+    if (i > 0) {
+      y += 14;
+      _divider(canvas, _pageW / 2, y + 8, _avail * .35, theme.accent);
+      y += 16 + 14;
+    }
+    sp[i].paint(canvas, Offset(_mx + _avail - sp[i].width, y));
+    y += sp[i].height + gapV;
+    aj[i].paint(canvas, Offset(_mx, y));
+    y += aj[i].height;
   }
   y += 28;
   _divider(canvas, _pageW / 2, y + 8, _avail * .5, theme.accent);
@@ -1757,21 +1753,24 @@ Future<Uint8List> buildVerseImage({
   return bd!.buffer.asUint8List();
 }
 
-/// نسخ البيت كنص مع اسم القصيدة
+/// نسخ البيت (أو البيتين / الثلاثة) كنص مع اسم القصيدة
 Future<void> copyVerseText(BuildContext context, Poem poem, Verse v,
-    [Verse? next]) async {
-  final nextText = next == null
-      ? ''
-      : '${displayText(next.sadr).trim()}\n${displayText(next.ajz).trim()}\n';
-  final text = '${displayText(v.sadr).trim()}\n${displayText(v.ajz).trim()}\n'
-      '$nextText'
+    [Verse? next, Verse? third]) async {
+  String two(Verse x) =>
+      '${displayText(x.sadr).trim()}\n${displayText(x.ajz).trim()}\n';
+  final text = '${two(v)}'
+      '${next == null ? '' : two(next)}'
+      '${third == null ? '' : two(third)}'
       '— ${poem.title}\nكلمات شاعر رسول الله ﷺ / عبدالرحمن مصطفى الأزهري';
   await Clipboard.setData(ClipboardData(text: text));
   if (!context.mounted) return;
   ScaffoldMessenger.of(context)
     ..hideCurrentSnackBar()
     ..showSnackBar(SnackBar(
-      content: Text(next == null ? 'تم نسخ البيت' : 'تم نسخ البيتين',
+      content: Text(
+          third != null
+              ? 'تم نسخ الأبيات'
+              : (next == null ? 'تم نسخ البيت' : 'تم نسخ البيتين'),
           textAlign: TextAlign.center),
       duration: const Duration(seconds: 2),
     ));
@@ -1780,7 +1779,7 @@ Future<void> copyVerseText(BuildContext context, Poem poem, Verse v,
 /// نافذة تصميم صورة البيت (معاينة حيّة) ثم الحفظ
 Future<void> showVerseImageSheet(
     BuildContext context, String diwan, Poem poem, Verse verse,
-    {Verse? nextVerse}) async {
+    {Verse? nextVerse, Verse? thirdVerse}) async {
   final messenger = ScaffoldMessenger.of(context);
   var themeI = 0;
   var paperI = 0;
@@ -1830,10 +1829,11 @@ Future<void> showVerseImageSheet(
         Future<Uint8List> make() => buildVerseImage(
               context: ctx,
               title: poem.title,
-              sadr: verse.sadr,
-              ajz: verse.ajz,
-              sadr2: nextVerse?.sadr,
-              ajz2: nextVerse?.ajz,
+              verses: [
+                (verse.sadr, verse.ajz),
+                if (nextVerse != null) (nextVerse.sadr, nextVerse.ajz),
+                if (thirdVerse != null) (thirdVerse.sadr, thirdVerse.ajz),
+              ],
               theme: pdfThemes[themeI],
               textColor: colorChoices[textI].color,
               paper: paperChoices[paperI].color,
@@ -1873,7 +1873,12 @@ Future<void> showVerseImageSheet(
                   padding: const EdgeInsets.fromLTRB(20, 14, 20, 8),
                   child: Align(
                     alignment: AlignmentDirectional.centerStart,
-                    child: Text(nextVerse == null ? 'حفظ البيت كصورة' : 'حفظ البيتين كصورة',
+                    child: Text(
+                        thirdVerse != null
+                            ? 'حفظ الأبيات كصورة'
+                            : (nextVerse == null
+                                ? 'حفظ البيت كصورة'
+                                : 'حفظ البيتين كصورة'),
                         style: TextStyle(
                             fontSize: 19,
                             fontWeight: FontWeight.bold,
@@ -1987,7 +1992,8 @@ Future<void> showVerseImageSheet(
                               padding: const EdgeInsets.symmetric(vertical: 14)),
                           onPressed: () async {
                             Navigator.pop(ctx);
-                            await copyVerseText(context, poem, verse, nextVerse);
+                            await copyVerseText(
+                                context, poem, verse, nextVerse, thirdVerse);
                           },
                           icon: const Icon(Icons.copy_rounded),
                           label: const Text('نسخ النص'),
@@ -2682,4 +2688,321 @@ Future<bool> showSalawatImageSheet(
     ),
   );
   return done;
+}
+
+
+// ════════════════════════════════════════════════
+// الديوان كله كملف PDF (نفس تصميم القصيدة، وقصائده بالتتابع)
+// ════════════════════════════════════════════════
+
+class _DPoem {
+  final TextPainter title;
+  final List<TextPainter> sadr;
+  final List<TextPainter> ajz;
+  final double gapV;
+  final double gap;
+  final List<double> hv;
+  _DPoem(this.title, this.sadr, this.ajz, this.gapV, this.gap, this.hv);
+  double get titleH => title.height + 8 + 16 + 10;
+}
+
+Future<Uint8List> buildDiwanPdf({
+  required BuildContext context,
+  required String diwan,
+  required List<Poem> poemsList,
+  required PdfTheme theme,
+  required Color textColor,
+  required Color paper,
+  int frame = 0,
+  int pattern = 0,
+  int header = 0,
+}) async {
+  final baseStyle = (Theme.of(context).textTheme.bodyMedium ?? const TextStyle())
+      .copyWith(decoration: TextDecoration.none);
+
+  TextStyle styleFor(double s) => withPoemFont(baseStyle.merge(TextStyle(
+        fontSize: s,
+        height: 1.0,
+        color: textColor,
+        fontWeight: poemFontWeight,
+      )));
+
+  double indentOf(TextStyle st) =>
+      measureText('ا        ا', st) - measureText('اا', st);
+
+  TextPainter centered(String text, TextStyle s, double width) => TextPainter(
+        text: TextSpan(text: text, style: s),
+        textDirection: TextDirection.rtl,
+        textAlign: TextAlign.center,
+        textScaler: TextScaler.noScaling,
+      )..layout(minWidth: width, maxWidth: width);
+
+  final titleStyle = baseStyle.merge(TextStyle(
+      color: theme.dark,
+      fontSize: 19,
+      height: 1.5,
+      fontWeight: FontWeight.bold));
+
+  // ضبط كل قصيدة (نفس منطق القصيدة المفردة: نصغّر الخط لو أطول شطر لا يتّسع)
+  final laid = <_DPoem>[];
+  for (var pi = 0; pi < poemsList.length; pi++) {
+    final poem = poemsList[pi];
+    final texts = <String>[
+      for (final v in poem.verses) ...[displayText(v.sadr), displayText(v.ajz)]
+    ].map((t) => t.trim().replaceAll(RegExp(r'\s+'), ' ')).toList();
+
+    var size = poemFontSize.value;
+    var st = styleFor(size);
+    var w = _avail - indentOf(st);
+    for (var i = 0; i < 6 && texts.isNotEmpty; i++) {
+      final maxW = texts.map((t) => measureText(t, st)).reduce(math.max);
+      if (maxW <= w) break;
+      size = math.max(12, size * (w / maxW) * 0.995);
+      st = styleFor(size);
+      w = _avail - indentOf(st);
+    }
+    final style = st;
+    final hw = w;
+
+    TextPainter hemistich(Justified j) => TextPainter(
+          text: TextSpan(
+            text: j.text,
+            style: style.copyWith(
+                wordSpacing: j.wordSpacing, height: j.fits ? 1.0 : 1.7),
+          ),
+          textDirection: TextDirection.rtl,
+          textAlign: TextAlign.right,
+          textScaler: TextScaler.noScaling,
+        )..layout(minWidth: hw, maxWidth: j.fits ? hw + 2 : hw);
+
+    final sadr = <TextPainter>[];
+    final ajz = <TextPainter>[];
+    for (final v in poem.verses) {
+      sadr.add(hemistich(justifyHemistich(displayText(v.sadr), style, hw)));
+      ajz.add(hemistich(justifyHemistich(displayText(v.ajz), style, hw)));
+    }
+    final gapV = size * .45;
+    final hv = [
+      for (var i = 0; i < sadr.length; i++)
+        sadr[i].height + gapV + ajz[i].height
+    ];
+    laid.add(_DPoem(centered(poem.title, titleStyle, _avail), sadr, ajz, gapV,
+        size * .95, hv));
+    if (pi % 3 == 2) await Future<void>.delayed(Duration.zero);
+  }
+
+  // الترويسة (الصفحة الأولى): اسم الديوان وعدد قصائده
+  final darkHeader = _headerDark(header);
+  final titleP = centered(
+      diwan,
+      baseStyle.merge(TextStyle(
+          color: darkHeader ? Colors.white : theme.dark,
+          fontSize: 22,
+          height: 1.5,
+          fontWeight: FontWeight.bold)),
+      _avail - 60);
+  final subP = centered(
+      '${arDigits(poemsList.length)} قصيدة',
+      baseStyle.merge(TextStyle(
+          color: darkHeader
+              ? const Color(0xFFE8D9BC)
+              : Color.lerp(theme.accent, Colors.black, .35),
+          fontSize: 14,
+          height: 1.4)),
+      _avail - 60);
+  final headerH = 30 + 22 + 10 + titleP.height + 10 + 16 + 10 + subP.height + 22;
+  const headerTop = 38.0;
+  final firstStart = headerTop + headerH + 26;
+
+  // التذييل (الصفحة الأخيرة) — نفس تذييل القصيدة
+  final f1 = centered(
+      'كلمات شاعر رسول الله ﷺ',
+      baseStyle.merge(TextStyle(
+          color: theme.dark, fontSize: 17, fontWeight: FontWeight.bold)),
+      _avail);
+  final f2 = centered(
+      'عبدالرحمن مصطفى الأزهري',
+      baseStyle.merge(TextStyle(
+          color: Color.lerp(theme.accent, Colors.black, .3),
+          fontSize: 15,
+          fontWeight: FontWeight.w600)),
+      _avail);
+  final footerH = 26 + 16 + 14 + f1.height + 8 + f2.height + 4;
+
+  // عناصر الترتيب: (رقم القصيدة، -1 = العنوان / رقم البيت)
+  final entries = <(int, int)>[];
+  for (var i = 0; i < laid.length; i++) {
+    entries.add((i, -1));
+    for (var v = 0; v < laid[i].hv.length; v++) {
+      entries.add((i, v));
+    }
+  }
+  double heightOf((int, int) e) =>
+      e.$2 < 0 ? laid[e.$1].titleH : laid[e.$1].hv[e.$2];
+  double beforeOf((int, int) e) {
+    if (e.$2 < 0) return 40; // بين القصائد
+    if (e.$2 == 0) return 6; // أول بيت تحت العنوان
+    final g = laid[e.$1].gap;
+    return g * .6 + 16 + g * .6; // فاصل بين الأبيات
+  }
+
+  // توزيع العناصر على الصفحات (العنوان لا يبقى وحده في آخر الصفحة)
+  final pages = <List<int>>[<int>[]];
+  var y = firstStart;
+  for (var k = 0; k < entries.length; k++) {
+    final e = entries[k];
+    var need = heightOf(e);
+    if (e.$2 < 0 && k + 1 < entries.length && entries[k + 1].$1 == e.$1) {
+      need += 6 + heightOf(entries[k + 1]);
+    }
+    if (k == entries.length - 1) need += footerH;
+    var before = pages.last.isEmpty ? 0.0 : beforeOf(e);
+    if (pages.last.isNotEmpty && y + before + need > _bottom) {
+      pages.add(<int>[]);
+      y = _top;
+      before = 0;
+    }
+    y += before + heightOf(e);
+    pages.last.add(k);
+  }
+
+  const scale = 2.5;
+  Future<Uint8List> renderPage(int pi, List<int> idx) async {
+    final rec = ui.PictureRecorder();
+    final canvas = Canvas(rec);
+    canvas.scale(scale);
+    _paintPage(canvas, theme, paper, frame, pattern);
+
+    var py = _top;
+    if (pi == 0) {
+      _paintHeader(canvas, theme, header, headerTop, headerH, titleP, subP);
+      py = firstStart;
+    }
+    for (var n = 0; n < idx.length; n++) {
+      final e = entries[idx[n]];
+      final p = laid[e.$1];
+      if (n > 0) {
+        if (e.$2 < 0) {
+          py += 40;
+        } else if (e.$2 == 0) {
+          py += 6;
+        } else {
+          py += p.gap * .6;
+          _divider(canvas, _pageW / 2, py + 8, _avail * .9, theme.accent);
+          py += 16 + p.gap * .6;
+        }
+      }
+      if (e.$2 < 0) {
+        p.title.paint(canvas, Offset(_mx, py));
+        py += p.title.height + 8;
+        _divider(canvas, _pageW / 2, py + 8, _avail * .5, theme.accent);
+        py += 16 + 10;
+      } else {
+        final v = e.$2;
+        p.sadr[v].paint(canvas, Offset(_mx + _avail - p.sadr[v].width, py));
+        py += p.sadr[v].height + p.gapV;
+        p.ajz[v].paint(canvas, Offset(_mx, py));
+        py += p.ajz[v].height;
+      }
+    }
+    if (pi == pages.length - 1) {
+      py += 26;
+      _divider(canvas, _pageW / 2, py + 8, _avail * .6, theme.accent);
+      py += 16 + 14;
+      f1.paint(canvas, Offset(_mx, py));
+      py += f1.height + 8;
+      f2.paint(canvas, Offset(_mx, py));
+    }
+
+    final pic = rec.endRecording();
+    final img = await pic.toImage(
+        (_pageW * scale).round(), (_pageH * scale).round());
+    final bd = await img.toByteData(format: ui.ImageByteFormat.png);
+    img.dispose();
+    pic.dispose();
+    return bd!.buffer.asUint8List();
+  }
+
+  final doc = pw.Document();
+  for (var pi = 0; pi < pages.length; pi++) {
+    final png = await renderPage(pi, pages[pi]);
+    final image = pw.MemoryImage(png);
+    doc.addPage(pw.Page(
+      pageFormat: PdfPageFormat.a4,
+      margin: pw.EdgeInsets.zero,
+      build: (_) => pw.FullPage(
+        ignoreMargins: true,
+        child: pw.Image(image, fit: pw.BoxFit.fill),
+      ),
+    ));
+    await Future<void>.delayed(Duration.zero);
+  }
+  return doc.save();
+}
+
+/// نافذة تصميم الـ PDF ثم إنشاء الديوان كله وحفظه في قسم «الملفات»
+Future<void> showDiwanPdfSheet(
+    BuildContext context, String diwan, List<Poem> list) async {
+  final messenger = ScaffoldMessenger.of(context);
+  void toast(String m) => messenger
+    ..hideCurrentSnackBar()
+    ..showSnackBar(SnackBar(
+        content: Text(m, textAlign: TextAlign.center),
+        duration: const Duration(seconds: 3)));
+
+  if (list.isEmpty) {
+    toast('لا توجد قصائد في هذا الديوان');
+    return;
+  }
+  final d = await _pickDesign(context, 'تحويل الديوان كله إلى PDF');
+  if (d == null || !context.mounted) return;
+
+  showDialog<void>(
+    context: context,
+    barrierDismissible: false,
+    builder: (_) => PopScope(
+      canPop: false,
+      child: Dialog(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const CircularProgressIndicator(),
+              const SizedBox(width: 18),
+              Flexible(
+                  child: Text(
+                      'جاري إنشاء ملف الديوان (${arDigits(list.length)} قصيدة)… قد يستغرق عدة دقائق')),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
+  await Future<void>.delayed(const Duration(milliseconds: 150));
+
+  Uint8List? bytes;
+  try {
+    bytes = await buildDiwanPdf(
+      context: context,
+      diwan: diwan,
+      poemsList: list,
+      theme: pdfThemes[d.theme],
+      textColor: colorChoices[d.text].color,
+      paper: paperChoices[d.paper].color,
+      frame: d.frame,
+      pattern: d.pattern,
+      header: d.header,
+    );
+  } catch (_) {
+    bytes = null;
+  }
+  if (context.mounted) Navigator.of(context, rootNavigator: true).pop();
+
+  if (bytes == null) {
+    toast('تعذّر إنشاء الملف');
+    return;
+  }
+  final inApp = await SavedFiles.save(SavedKind.pdf, diwan, bytes);
+  toast(inApp != null ? 'تم حفظ الديوان في قسم «الملفات»' : 'تعذّر حفظ الملف');
 }

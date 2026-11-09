@@ -1753,7 +1753,16 @@ class _DiwanDetailPageState extends State<DiwanDetailPage> {
     return Scaffold(
       appBar: AppBar(
           backgroundColor: dc.$1,
-          title: Text(widget.name, style: const TextStyle(fontSize: 16))),
+          title: Text(widget.name, style: const TextStyle(fontSize: 16)),
+          actions: [
+            IconButton(
+              tooltip: 'تحويل الديوان كله إلى PDF',
+              icon: const Icon(Icons.picture_as_pdf_rounded),
+              onPressed: list.isEmpty
+                  ? null
+                  : () => showDiwanPdfSheet(context, widget.name, list),
+            ),
+          ]),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
         children: [
@@ -3013,7 +3022,7 @@ class PoemPage extends StatelessWidget {
 
   /// اختيار بيت من القصيدة لحفظه كصورة
   void _pickVerse(BuildContext context) {
-    var two = false; // false = بيت واحد، true = بيتان
+    var count = 1; // عدد الأبيات: 1 أو 2 أو 3
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -3035,27 +3044,32 @@ class PoemPage extends StatelessWidget {
                 Wrap(
                   spacing: 10,
                   children: [
-                    for (final opt in const [(false, 'بيت واحد'), (true, 'بيتان')])
+                    for (final opt in const [
+                      (1, 'بيت واحد'),
+                      (2, 'بيتان'),
+                      (3, 'ثلاثة أبيات')
+                    ])
                       ChoiceChip(
                         label: Text(opt.$2,
                             style: TextStyle(
                                 fontSize: 14,
-                                fontWeight: two == opt.$1
+                                fontWeight: count == opt.$1
                                     ? FontWeight.bold
                                     : FontWeight.normal,
-                                color: two == opt.$1 ? Colors.white : brownDark)),
-                        selected: two == opt.$1,
+                                color:
+                                    count == opt.$1 ? Colors.white : brownDark)),
+                        selected: count == opt.$1,
                         showCheckmark: false,
                         selectedColor: brown,
                         backgroundColor: Colors.white,
-                        onSelected: (_) => setS(() => two = opt.$1),
+                        onSelected: (_) => setS(() => count = opt.$1),
                       ),
                   ],
                 ),
-                if (two)
+                if (count > 1)
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-                    child: Text('يُحفظ البيت المختار مع البيت الذي يليه',
+                    child: Text('يُحفظ البيت المختار مع الأبيات التي تليه',
                         style: TextStyle(fontSize: 12.5, color: inkSoft)),
                   ),
                 const SizedBox(height: 6),
@@ -3080,16 +3094,12 @@ class PoemPage extends StatelessWidget {
                         onTap: () {
                           Navigator.pop(ctx);
                           final vs = poem.verses;
-                          if (!two || vs.length < 2) {
-                            showVerseImageSheet(context, diwan, poem, v);
-                          } else if (i + 1 < vs.length) {
-                            showVerseImageSheet(context, diwan, poem, v,
-                                nextVerse: vs[i + 1]);
-                          } else {
-                            // آخر بيت: نأخذ البيت السابق معه
-                            showVerseImageSheet(context, diwan, poem, vs[i - 1],
-                                nextVerse: v);
-                          }
+                          // لو الأبيات الباقية أقل من المطلوب نبدأ من قبل البيت المختار
+                          final n = math.min(count, vs.length);
+                          final start = math.min(i, vs.length - n);
+                          showVerseImageSheet(context, diwan, poem, vs[start],
+                              nextVerse: n > 1 ? vs[start + 1] : null,
+                              thirdVerse: n > 2 ? vs[start + 2] : null);
                         },
                       );
                     },
