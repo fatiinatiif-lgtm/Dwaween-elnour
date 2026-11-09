@@ -1,3 +1,5 @@
+import 'dart:convert' show latin1;
+import 'dart:io' show ZLibEncoder;
 import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
@@ -51,6 +53,18 @@ const pdfThemes = [
   PdfTheme('كحلي وفيروزي', Color(0xFF102A43), Color(0xFF2EA99B)),
   PdfTheme('عنابي وفضي', Color(0xFF5C1A2B), Color(0xFFB8BEC6)),
   PdfTheme('أخضر ليموني', Color(0xFF558B2F), Color(0xFFD2B24C)),
+  PdfTheme('أخضر ملكي ونحاسي', Color(0xFF0B3D2E), Color(0xFFB87333)),
+  PdfTheme('أزرق ليلي وذهبي', Color(0xFF0A1F44), Color(0xFFE0B341)),
+  PdfTheme('عنابي داكن ونحاسي', Color(0xFF4A0E1F), Color(0xFFC9885B)),
+  PdfTheme('بنفسجي وذهبي فاتح', Color(0xFF6A1B9A), Color(0xFFE8C170)),
+  PdfTheme('أخضر نعناعي وفضي', Color(0xFF2E7D6B), Color(0xFFB5C9C3)),
+  PdfTheme('طوبي وذهبي', Color(0xFF8E2A1A), Color(0xFFD9A441)),
+  PdfTheme('رمادي أزرق وذهبي', Color(0xFF34495E), Color(0xFFD4AF37)),
+  PdfTheme('زيتي وبرونزي', Color(0xFF4B5320), Color(0xFFCD9B4A)),
+  PdfTheme('أسود وفضي', Color(0xFF1C1C1C), Color(0xFFB0B7BF)),
+  PdfTheme('وردي غامق وذهبي وردي', Color(0xFFAD1457), Color(0xFFE6B89C)),
+  PdfTheme('تركوازي ملكي وذهبي', Color(0xFF006064), Color(0xFFD4AF37)),
+  PdfTheme('نيلي وذهبي', Color(0xFF283593), Color(0xFFE0B341)),
 ];
 
 class PaperChoice {
@@ -74,6 +88,12 @@ const paperChoices = [
   PaperChoice('رق قديم', Color(0xFFF4E8C8)),
   PaperChoice('أزرق ثلجي', Color(0xFFE3F2FD)),
   PaperChoice('ذهبي باهت', Color(0xFFFBF3D5)),
+  PaperChoice('عاجي', Color(0xFFFFF8E7)),
+  PaperChoice('وردة باهتة', Color(0xFFFBE9E7)),
+  PaperChoice('سماوي باهت', Color(0xFFE0F7FA)),
+  PaperChoice('أخضر ربيعي', Color(0xFFF4F9E5)),
+  PaperChoice('بنفسجي باهت', Color(0xFFEDE7F6)),
+  PaperChoice('قهوة بالحليب', Color(0xFFEFE3D3)),
 ];
 
 // ───────────── خيارات التصميم ─────────────
@@ -102,6 +122,14 @@ const frameLabels = [
   'شريط ذهبي سميك', // 20
   'دوائر الأركان', // 21
   'معيّنات ونقاط', // 22
+  'أوراق متسلسلة', // 23
+  'ربع الحزب', // 24
+  'سلسلة معيّنات', // 25
+  'مربعات مثمّنة', // 26
+  'هلال ونجوم', // 27
+  'ذهبي متدرّج', // 28
+  'عقود علوية وسفلية', // 29
+  'أزهار الزوايا', // 30
 ];
 const _frameArch = 8;
 const _frameNone = 11;
@@ -116,6 +144,9 @@ const patternLabels = [
   'بدون نقش', // 6
   'علامة مائية', // 7
   'نجوم متناثرة', // 8
+  'قشور', // 9
+  'سداسيات', // 10
+  'خطوط مائلة', // 11
 ];
 
 const headerLabels = [
@@ -133,10 +164,15 @@ const headerLabels = [
   'كبسولة داكنة', // 11
   'شرفات', // 12
   'جوانب مقعّرة', // 13
+  'مفصّص علوي', // 14
+  'قوس مدبّب داكن', // 15
+  'لوح بنجوم', // 16
+  'شريط ورقي', // 17
 ];
 
 /// الترويسات الملوّنة (نص أبيض) مقابل الفاتحة (نص بلون الثيم)
-bool _headerDark(int h) => h <= 1 || h == 5 || h == 8 || h == 11;
+bool _headerDark(int h) =>
+    h <= 1 || h == 5 || h == 8 || h == 11 || h == 15 || h == 17;
 
 // ───────────── مقاسات الصفحة (A4 بالنسبة) ─────────────
 
@@ -379,12 +415,333 @@ void _paintPattern(Canvas canvas, PdfTheme t, int pattern) {
           canvas.drawPath(_pdfStar(c, 2 + rnd.nextDouble() * 5, .5), fill);
         }
       }
+    case 9:
+      {
+        // قشور (أقواس متراكبة)
+        final p = _stroke(t.accent.withOpacity(.18), .9);
+        var row = 0;
+        for (var y = 0.0; y < _pageH + 14; y += 12) {
+          final off = row.isEven ? 0.0 : 14.0;
+          for (var x = -14.0 + off; x < _pageW + 28; x += 28) {
+            canvas.drawArc(Rect.fromCircle(center: Offset(x, y), radius: 14), 0,
+                math.pi, false, p);
+          }
+          row++;
+        }
+      }
+    case 10:
+      {
+        // خلية سداسية
+        const r = 16.0;
+        final h = math.sqrt(3) * r;
+        final p = _stroke(t.accent.withOpacity(.17), .9);
+        var col = 0;
+        for (var x = 0.0; x < _pageW + r * 2; x += r * 1.5) {
+          for (var y = (col.isOdd ? h / 2 : 0.0) - h; y < _pageH + h; y += h) {
+            final hex = Path();
+            for (var i = 0; i < 6; i++) {
+              final a = i * math.pi / 3;
+              final pt = Offset(x + r * math.cos(a), y + r * math.sin(a));
+              if (i == 0) {
+                hex.moveTo(pt.dx, pt.dy);
+              } else {
+                hex.lineTo(pt.dx, pt.dy);
+              }
+            }
+            canvas.drawPath(hex..close(), p);
+          }
+          col++;
+        }
+      }
+    case 11:
+      {
+        final p = _stroke(t.accent.withOpacity(.16), .8);
+        for (var k = -_pageH; k < _pageW; k += 11) {
+          canvas.drawLine(Offset(k, _pageH), Offset(k + _pageH, 0), p);
+        }
+      }
     default:
       break;
   }
 }
 
 // ───────────── الإطارات ─────────────
+
+// ───────────── الأيقونات الإسلامية (تُرسم أعلى الصفحة الأولى / أعلى الصورة) ─────────────
+
+const iconLabels = [
+  'بدون أيقونة', // 0
+  'القبة الخضراء', // 1
+  'الكعبة المشرفة', // 2
+  'سبحة', // 3
+  'يدان للدعاء', // 4
+  'هلال ونجمة', // 5
+  'مسجد', // 6
+  'فانوس', // 7
+  'مصحف', // 8
+];
+
+const double _iconBand = 70; // المساحة التي تحجزها الأيقونة أعلى الصفحة الأولى
+const double _iconSize = 54;
+const double _iconCy = 64; // مركز الأيقونة رأسيًا في الصفحة الأولى
+
+/// طبقة واحدة من الأيقونة: مسار SVG مبسّط (M L C Q Z) داخل مربع 100×100.
+/// color: 0 = لون الثيم الداكن، 1 = لون الزخرفة، وغير ذلك = لون ثابت ARGB.
+class _IconLayer {
+  final bool stroke;
+  final int color;
+  final double w;
+  final String d;
+  const _IconLayer(this.stroke, this.color, this.w, this.d);
+}
+
+const _icons = <List<_IconLayer>>[
+  // القبة الخضراء
+  [
+    _IconLayer(false, 1, 0, 'M49 6L51 6L51 19L49 19Z'),
+    _IconLayer(false, 1, 0, 'M53 8C53 9.7 51.7 11 50 11C48.3 11 47 9.7 47 8C47 6.3 48.3 5 50 5C51.7 5 53 6.3 53 8Z'),
+    _IconLayer(false, 0xFF2E7D32, 0, 'M24 58C24 40 36 26 50 19C64 26 76 40 76 58Z'),
+    _IconLayer(false, 0xFF66BB6A, 0, 'M32 56C32 43 40 33 50 26C43 35 38 45 38 56Z'),
+    _IconLayer(true, 1, 1.2, 'M24 58C24 40 36 26 50 19C64 26 76 40 76 58'),
+    _IconLayer(false, 1, 0, 'M26 58L74 58L74 68L26 68Z'),
+    _IconLayer(false, 0, 0, 'M33 66L33 62Q36 58.5 39 62L39 66Z'),
+    _IconLayer(false, 0, 0, 'M45 66L45 62Q48 58.5 51 62L51 66Z'),
+    _IconLayer(false, 0, 0, 'M57 66L57 62Q60 58.5 63 62L63 66Z'),
+    _IconLayer(false, 0, 0, 'M63 66L63 62Q66 58.5 69 62L69 66Z'),
+    _IconLayer(false, 0, 0, 'M14 68L86 68L86 88L14 88Z'),
+    _IconLayer(false, 1, 0, 'M14 68L86 68L86 70.5L14 70.5Z'),
+    _IconLayer(false, 1, 0, 'M22 88L22 80Q26 74 30 80L30 88Z'),
+    _IconLayer(false, 1, 0, 'M36 88L36 80Q40 74 44 80L44 88Z'),
+    _IconLayer(false, 1, 0, 'M50 88L50 80Q54 74 58 80L58 88Z'),
+    _IconLayer(false, 1, 0, 'M64 88L64 80Q68 74 72 80L72 88Z'),
+    _IconLayer(false, 0, 0, 'M6 50L12 50L12 88L6 88Z'),
+    _IconLayer(false, 0, 0, 'M88 50L94 50L94 88L88 88Z'),
+    _IconLayer(false, 1, 0, 'M5 50L9 40L13 50Z'),
+    _IconLayer(false, 1, 0, 'M87 50L91 40L95 50Z'),
+  ],
+  // الكعبة
+  [
+    _IconLayer(false, 0xFF1B1B1B, 0, 'M14 38L62 38L62 90L14 90Z'),
+    _IconLayer(false, 0xFF2C2C2C, 0, 'M62 38L88 28L88 80L62 90Z'),
+    _IconLayer(false, 0xFF3A3A3A, 0, 'M14 38L40 28L88 28L62 38Z'),
+    _IconLayer(false, 1, 0, 'M14 47L62 47L62 55L14 55Z'),
+    _IconLayer(false, 0xFFC9A24B, 0, 'M62 47L88 38L88 46L62 55Z'),
+    _IconLayer(false, 1, 0, 'M14 38L62 38L62 41L14 41Z'),
+    _IconLayer(false, 0, 0, 'M22 48.4L22.8 50.2L24.6 51L22.8 51.8L22 53.6L21.2 51.8L19.4 51L21.2 50.2Z'),
+    _IconLayer(false, 0, 0, 'M32 48.4L32.8 50.2L34.6 51L32.8 51.8L32 53.6L31.2 51.8L29.4 51L31.2 50.2Z'),
+    _IconLayer(false, 0, 0, 'M42 48.4L42.8 50.2L44.6 51L42.8 51.8L42 53.6L41.2 51.8L39.4 51L41.2 50.2Z'),
+    _IconLayer(false, 0, 0, 'M52 48.4L52.8 50.2L54.6 51L52.8 51.8L52 53.6L51.2 51.8L49.4 51L51.2 50.2Z'),
+    _IconLayer(false, 1, 0, 'M40 90L40 68L54 68L54 90Z'),
+    _IconLayer(false, 0xFF1B1B1B, 0, 'M42.5 71L51 71L51 90L42.5 90Z'),
+    _IconLayer(true, 1, 1.0, 'M20 60L34 60Z'),
+  ],
+  // سبحة
+  [
+    _IconLayer(false, 1, 0, 'M50.6 66.7C50.6 69.2 48.5 71.3 46 71.3C43.4 71.3 41.4 69.2 41.4 66.7C41.4 64.2 43.4 62.1 46 62.1C48.5 62.1 50.6 64.2 50.6 66.7Z'),
+    _IconLayer(false, 0x66FFFFFF, 0, 'M46 65.3C46 66.1 45.3 66.7 44.6 66.7C43.8 66.7 43.2 66.1 43.2 65.3C43.2 64.5 43.8 63.9 44.6 63.9C45.3 63.9 46 64.5 46 65.3Z'),
+    _IconLayer(false, 0, 0, 'M42.9 64.3C42.9 66.9 40.8 68.9 38.3 68.9C35.7 68.9 33.7 66.9 33.7 64.3C33.7 61.8 35.7 59.7 38.3 59.7C40.8 59.7 42.9 61.8 42.9 64.3Z'),
+    _IconLayer(false, 0x66FFFFFF, 0, 'M38.3 62.9C38.3 63.7 37.7 64.3 36.9 64.3C36.1 64.3 35.5 63.7 35.5 62.9C35.5 62.2 36.1 61.5 36.9 61.5C37.7 61.5 38.3 62.2 38.3 62.9Z'),
+    _IconLayer(false, 1, 0, 'M36.2 59.8C36.2 62.3 34.2 64.4 31.6 64.4C29.1 64.4 27 62.3 27 59.8C27 57.3 29.1 55.2 31.6 55.2C34.2 55.2 36.2 57.3 36.2 59.8Z'),
+    _IconLayer(false, 0x66FFFFFF, 0, 'M31.6 58.4C31.6 59.2 31 59.8 30.2 59.8C29.5 59.8 28.8 59.2 28.8 58.4C28.8 57.6 29.5 57 30.2 57C31 57 31.6 57.6 31.6 58.4Z'),
+    _IconLayer(false, 0, 0, 'M31.2 53.5C31.2 56 29.2 58.1 26.6 58.1C24.1 58.1 22 56 22 53.5C22 51 24.1 48.9 26.6 48.9C29.2 48.9 31.2 51 31.2 53.5Z'),
+    _IconLayer(false, 0x66FFFFFF, 0, 'M26.6 52.1C26.6 52.9 26 53.5 25.2 53.5C24.4 53.5 23.8 52.9 23.8 52.1C23.8 51.3 24.4 50.7 25.2 50.7C26 50.7 26.6 51.3 26.6 52.1Z'),
+    _IconLayer(false, 1, 0, 'M28.3 46C28.3 48.5 26.2 50.6 23.7 50.6C21.1 50.6 19.1 48.5 19.1 46C19.1 43.5 21.1 41.4 23.7 41.4C26.2 41.4 28.3 43.5 28.3 46Z'),
+    _IconLayer(false, 0x66FFFFFF, 0, 'M23.7 44.6C23.7 45.4 23.1 46 22.3 46C21.5 46 20.9 45.4 20.9 44.6C20.9 43.8 21.5 43.2 22.3 43.2C23.1 43.2 23.7 43.8 23.7 44.6Z'),
+    _IconLayer(false, 0, 0, 'M27.7 38C27.7 40.5 25.6 42.6 23.1 42.6C20.5 42.6 18.5 40.5 18.5 38C18.5 35.4 20.5 33.4 23.1 33.4C25.6 33.4 27.7 35.4 27.7 38Z'),
+    _IconLayer(false, 0x66FFFFFF, 0, 'M23.1 36.6C23.1 37.4 22.4 38 21.7 38C20.9 38 20.3 37.4 20.3 36.6C20.3 35.8 20.9 35.2 21.7 35.2C22.4 35.2 23.1 35.8 23.1 36.6Z'),
+    _IconLayer(false, 1, 0, 'M29.5 30.1C29.5 32.7 27.4 34.7 24.9 34.7C22.3 34.7 20.3 32.7 20.3 30.1C20.3 27.6 22.3 25.5 24.9 25.5C27.4 25.5 29.5 27.6 29.5 30.1Z'),
+    _IconLayer(false, 0x66FFFFFF, 0, 'M24.9 28.7C24.9 29.5 24.2 30.1 23.5 30.1C22.7 30.1 22.1 29.5 22.1 28.7C22.1 28 22.7 27.3 23.5 27.3C24.2 27.3 24.9 28 24.9 28.7Z'),
+    _IconLayer(false, 0, 0, 'M33.5 23.2C33.5 25.7 31.4 27.8 28.9 27.8C26.4 27.8 24.3 25.7 24.3 23.2C24.3 20.6 26.4 18.6 28.9 18.6C31.4 18.6 33.5 20.6 33.5 23.2Z'),
+    _IconLayer(false, 0x66FFFFFF, 0, 'M28.9 21.8C28.9 22.5 28.3 23.2 27.5 23.2C26.7 23.2 26.1 22.5 26.1 21.8C26.1 21 26.7 20.4 27.5 20.4C28.3 20.4 28.9 21 28.9 21.8Z'),
+    _IconLayer(false, 1, 0, 'M39.4 17.7C39.4 20.2 37.3 22.3 34.8 22.3C32.2 22.3 30.2 20.2 30.2 17.7C30.2 15.2 32.2 13.1 34.8 13.1C37.3 13.1 39.4 15.2 39.4 17.7Z'),
+    _IconLayer(false, 0x66FFFFFF, 0, 'M34.8 16.3C34.8 17.1 34.2 17.7 33.4 17.7C32.6 17.7 32 17.1 32 16.3C32 15.5 32.6 14.9 33.4 14.9C34.2 14.9 34.8 15.5 34.8 16.3Z'),
+    _IconLayer(false, 0, 0, 'M46.6 14.2C46.6 16.7 44.6 18.8 42 18.8C39.5 18.8 37.4 16.7 37.4 14.2C37.4 11.7 39.5 9.6 42 9.6C44.6 9.6 46.6 11.7 46.6 14.2Z'),
+    _IconLayer(false, 0x66FFFFFF, 0, 'M42 12.8C42 13.6 41.4 14.2 40.6 14.2C39.9 14.2 39.2 13.6 39.2 12.8C39.2 12 39.9 11.4 40.6 11.4C41.4 11.4 42 12 42 12.8Z'),
+    _IconLayer(false, 1, 0, 'M54.6 13C54.6 15.5 52.5 17.6 50 17.6C47.5 17.6 45.4 15.5 45.4 13C45.4 10.5 47.5 8.4 50 8.4C52.5 8.4 54.6 10.5 54.6 13Z'),
+    _IconLayer(false, 0x66FFFFFF, 0, 'M50 11.6C50 12.4 49.4 13 48.6 13C47.8 13 47.2 12.4 47.2 11.6C47.2 10.8 47.8 10.2 48.6 10.2C49.4 10.2 50 10.8 50 11.6Z'),
+    _IconLayer(false, 0, 0, 'M62.6 14.2C62.6 16.7 60.5 18.8 58 18.8C55.4 18.8 53.4 16.7 53.4 14.2C53.4 11.7 55.4 9.6 58 9.6C60.5 9.6 62.6 11.7 62.6 14.2Z'),
+    _IconLayer(false, 0x66FFFFFF, 0, 'M58 12.8C58 13.6 57.3 14.2 56.6 14.2C55.8 14.2 55.2 13.6 55.2 12.8C55.2 12 55.8 11.4 56.6 11.4C57.3 11.4 58 12 58 12.8Z'),
+    _IconLayer(false, 1, 0, 'M69.8 17.7C69.8 20.2 67.8 22.3 65.2 22.3C62.7 22.3 60.6 20.2 60.6 17.7C60.6 15.2 62.7 13.1 65.2 13.1C67.8 13.1 69.8 15.2 69.8 17.7Z'),
+    _IconLayer(false, 0x66FFFFFF, 0, 'M65.2 16.3C65.2 17.1 64.6 17.7 63.8 17.7C63 17.7 62.4 17.1 62.4 16.3C62.4 15.5 63 14.9 63.8 14.9C64.6 14.9 65.2 15.5 65.2 16.3Z'),
+    _IconLayer(false, 0, 0, 'M75.7 23.2C75.7 25.7 73.6 27.8 71.1 27.8C68.6 27.8 66.5 25.7 66.5 23.2C66.5 20.6 68.6 18.6 71.1 18.6C73.6 18.6 75.7 20.6 75.7 23.2Z'),
+    _IconLayer(false, 0x66FFFFFF, 0, 'M71.1 21.8C71.1 22.5 70.5 23.2 69.7 23.2C68.9 23.2 68.3 22.5 68.3 21.8C68.3 21 68.9 20.4 69.7 20.4C70.5 20.4 71.1 21 71.1 21.8Z'),
+    _IconLayer(false, 1, 0, 'M79.7 30.1C79.7 32.7 77.7 34.7 75.1 34.7C72.6 34.7 70.5 32.7 70.5 30.1C70.5 27.6 72.6 25.5 75.1 25.5C77.7 25.5 79.7 27.6 79.7 30.1Z'),
+    _IconLayer(false, 0x66FFFFFF, 0, 'M75.1 28.7C75.1 29.5 74.5 30.1 73.7 30.1C73 30.1 72.3 29.5 72.3 28.7C72.3 28 73 27.3 73.7 27.3C74.5 27.3 75.1 28 75.1 28.7Z'),
+    _IconLayer(false, 0, 0, 'M81.5 38C81.5 40.5 79.5 42.6 76.9 42.6C74.4 42.6 72.3 40.5 72.3 38C72.3 35.4 74.4 33.4 76.9 33.4C79.5 33.4 81.5 35.4 81.5 38Z'),
+    _IconLayer(false, 0x66FFFFFF, 0, 'M76.9 36.6C76.9 37.4 76.3 38 75.5 38C74.8 38 74.1 37.4 74.1 36.6C74.1 35.8 74.8 35.2 75.5 35.2C76.3 35.2 76.9 35.8 76.9 36.6Z'),
+    _IconLayer(false, 1, 0, 'M80.9 46C80.9 48.5 78.9 50.6 76.3 50.6C73.8 50.6 71.7 48.5 71.7 46C71.7 43.5 73.8 41.4 76.3 41.4C78.9 41.4 80.9 43.5 80.9 46Z'),
+    _IconLayer(false, 0x66FFFFFF, 0, 'M76.3 44.6C76.3 45.4 75.7 46 74.9 46C74.1 46 73.5 45.4 73.5 44.6C73.5 43.8 74.1 43.2 74.9 43.2C75.7 43.2 76.3 43.8 76.3 44.6Z'),
+    _IconLayer(false, 0, 0, 'M78 53.5C78 56 75.9 58.1 73.4 58.1C70.8 58.1 68.8 56 68.8 53.5C68.8 51 70.8 48.9 73.4 48.9C75.9 48.9 78 51 78 53.5Z'),
+    _IconLayer(false, 0x66FFFFFF, 0, 'M73.4 52.1C73.4 52.9 72.8 53.5 72 53.5C71.2 53.5 70.6 52.9 70.6 52.1C70.6 51.3 71.2 50.7 72 50.7C72.8 50.7 73.4 51.3 73.4 52.1Z'),
+    _IconLayer(false, 1, 0, 'M73 59.8C73 62.3 70.9 64.4 68.4 64.4C65.8 64.4 63.8 62.3 63.8 59.8C63.8 57.3 65.8 55.2 68.4 55.2C70.9 55.2 73 57.3 73 59.8Z'),
+    _IconLayer(false, 0x66FFFFFF, 0, 'M68.4 58.4C68.4 59.2 67.7 59.8 67 59.8C66.2 59.8 65.6 59.2 65.6 58.4C65.6 57.6 66.2 57 67 57C67.7 57 68.4 57.6 68.4 58.4Z'),
+    _IconLayer(false, 0, 0, 'M66.3 64.3C66.3 66.9 64.3 68.9 61.7 68.9C59.2 68.9 57.1 66.9 57.1 64.3C57.1 61.8 59.2 59.7 61.7 59.7C64.3 59.7 66.3 61.8 66.3 64.3Z'),
+    _IconLayer(false, 0x66FFFFFF, 0, 'M61.7 62.9C61.7 63.7 61.1 64.3 60.3 64.3C59.5 64.3 58.9 63.7 58.9 62.9C58.9 62.2 59.5 61.5 60.3 61.5C61.1 61.5 61.7 62.2 61.7 62.9Z'),
+    _IconLayer(false, 1, 0, 'M58.6 66.7C58.6 69.2 56.6 71.3 54 71.3C51.5 71.3 49.4 69.2 49.4 66.7C49.4 64.2 51.5 62.1 54 62.1C56.6 62.1 58.6 64.2 58.6 66.7Z'),
+    _IconLayer(false, 0x66FFFFFF, 0, 'M54 65.3C54 66.1 53.4 66.7 52.6 66.7C51.9 66.7 51.2 66.1 51.2 65.3C51.2 64.5 51.9 63.9 52.6 63.9C53.4 63.9 54 64.5 54 65.3Z'),
+    _IconLayer(true, 0, 1.0, 'M77 40C77 54.9 64.9 67 50 67C35.1 67 23 54.9 23 40C23 25.1 35.1 13 50 13C64.9 13 77 25.1 77 40'),
+    _IconLayer(false, 0, 0, 'M56.2 72C56.2 76.1 53.4 79.4 50 79.4C46.6 79.4 43.8 76.1 43.8 72C43.8 67.9 46.6 64.6 50 64.6C53.4 64.6 56.2 67.9 56.2 72Z'),
+    _IconLayer(false, 1, 0, 'M52.4 72C52.4 73.3 51.3 74.4 50 74.4C48.7 74.4 47.6 73.3 47.6 72C47.6 70.7 48.7 69.6 50 69.6C51.3 69.6 52.4 70.7 52.4 72Z'),
+    _IconLayer(true, 0, 1.4, 'M50 79L50 84Z'),
+    _IconLayer(false, 1, 0, 'M53.2 87C53.2 88.8 51.8 90.2 50 90.2C48.2 90.2 46.8 88.8 46.8 87C46.8 85.2 48.2 83.8 50 83.8C51.8 83.8 53.2 85.2 53.2 87Z'),
+    _IconLayer(false, 0, 0, 'M50 89L44 99L56 99Z'),
+    _IconLayer(true, 1, 1.0, 'M50 90L46 98Z'),
+    _IconLayer(true, 1, 1.0, 'M50 90L50 98Z'),
+    _IconLayer(true, 1, 1.0, 'M50 90L54 98Z'),
+    _IconLayer(true, 0, 1.4, 'M50 67L50 66Z'),
+  ],
+  // يدا الدعاء
+  [
+    _IconLayer(false, 0, 0, 'M55.2 62.5C57.1 57.6 62.7 55.2 67.5 57.2C72.4 59.1 74.8 64.7 72.8 69.5L64.8 89.5C62.9 94.4 57.3 96.8 52.5 94.8C47.6 92.9 45.2 87.3 47.2 82.5Z'),
+    _IconLayer(false, 0, 0, 'M74 62C74 67 69.1 71 63 71C56.9 71 52 67 52 62C52 57 56.9 53 63 53C69.1 53 74 57 74 62Z'),
+    _IconLayer(false, 0, 0, 'M50 39.3C49.9 37.5 51.3 35.9 53.1 35.8C54.9 35.6 56.5 37 56.6 38.8L58.3 62.8C58.4 64.6 57 66.2 55.2 66.3C53.4 66.4 51.8 65 51.7 63.2Z'),
+    _IconLayer(false, 0, 0, 'M61 22.9C61.2 21.1 62.8 19.9 64.5 20.1C66.3 20.3 67.5 21.9 67.3 23.6L63.2 57.4C63 59.1 61.4 60.4 59.6 60.2C57.9 60 56.6 58.4 56.8 56.6Z'),
+    _IconLayer(false, 0, 0, 'M71.2 19.4C71.7 17.7 73.4 16.7 75.1 17.1C76.9 17.6 77.9 19.3 77.4 21.1L68.1 55.8C67.6 57.5 65.9 58.5 64.2 58.1C62.5 57.6 61.5 55.9 61.9 54.2Z'),
+    _IconLayer(false, 0, 0, 'M80.7 26.7C81.4 25.1 83.3 24.5 84.8 25.2C86.4 25.9 87.1 27.8 86.3 29.3L72.8 58.3C72.1 59.9 70.2 60.5 68.7 59.8C67.1 59.1 66.5 57.2 67.2 55.7Z'),
+    _IconLayer(false, 0, 0, 'M87.1 40.5C88.1 39.3 89.9 39 91.2 40C92.4 41 92.7 42.8 91.7 44.1L76.3 63.8C75.3 65 73.5 65.3 72.2 64.3C71 63.3 70.7 61.5 71.7 60.2Z'),
+    _IconLayer(false, 0, 0, 'M27.2 69.5C25.2 64.7 27.6 59.1 32.5 57.2C37.3 55.2 42.9 57.6 44.8 62.5L52.8 82.5C54.8 87.3 52.4 92.9 47.5 94.8C42.7 96.8 37.1 94.4 35.2 89.5Z'),
+    _IconLayer(false, 0, 0, 'M48 62C48 67 43.1 71 37 71C30.9 71 26 67 26 62C26 57 30.9 53 37 53C43.1 53 48 57 48 62Z'),
+    _IconLayer(false, 0, 0, 'M43.4 38.8C43.5 37 45.1 35.6 46.9 35.8C48.7 35.9 50.1 37.5 50 39.3L48.3 63.2C48.2 65 46.6 66.4 44.8 66.3C43 66.2 41.6 64.6 41.7 62.8Z'),
+    _IconLayer(false, 0, 0, 'M32.7 23.6C32.5 21.9 33.7 20.3 35.5 20.1C37.2 19.9 38.8 21.1 39 22.9L43.2 56.6C43.4 58.4 42.1 60 40.4 60.2C38.6 60.4 37 59.1 36.8 57.4Z'),
+    _IconLayer(false, 0, 0, 'M22.6 21.1C22.1 19.3 23.1 17.6 24.9 17.1C26.6 16.7 28.3 17.7 28.8 19.4L38.1 54.2C38.5 55.9 37.5 57.6 35.8 58.1C34.1 58.5 32.4 57.5 31.9 55.8Z'),
+    _IconLayer(false, 0, 0, 'M13.7 29.3C12.9 27.8 13.6 25.9 15.2 25.2C16.7 24.5 18.6 25.1 19.3 26.7L32.8 55.7C33.5 57.2 32.9 59.1 31.3 59.8C29.8 60.5 27.9 59.9 27.2 58.3Z'),
+    _IconLayer(false, 0, 0, 'M8.3 44.1C7.3 42.8 7.6 41 8.8 40C10.1 39 11.9 39.3 12.9 40.5L28.3 60.2C29.3 61.5 29 63.3 27.8 64.3C26.5 65.3 24.7 65 23.7 63.8Z'),
+    _IconLayer(true, 1, 1.6, 'M26 76C34 92 66 92 74 76'),
+    _IconLayer(false, 1, 0, 'M50 5L51.5 10.5L56.4 7.6L53.5 12.5L59 14L53.5 15.5L56.4 20.4L51.5 17.5L50 23L48.5 17.5L43.6 20.4L46.5 15.5L41 14L46.5 12.5L43.6 7.6L48.5 10.5Z'),
+    _IconLayer(false, 1, 0, 'M31.8 9C31.8 10 31 10.8 30 10.8C29 10.8 28.2 10 28.2 9C28.2 8 29 7.2 30 7.2C31 7.2 31.8 8 31.8 9Z'),
+    _IconLayer(false, 1, 0, 'M71.8 9C71.8 10 71 10.8 70 10.8C69 10.8 68.2 10 68.2 9C68.2 8 69 7.2 70 7.2C71 7.2 71.8 8 71.8 9Z'),
+  ],
+  // هلال ونجمة
+  [
+    _IconLayer(false, 1, 0, 'M60.7 21.1C42.9 13.2 22 20.8 13.6 38.4C5.1 55.9 12.1 77 29.4 86C46.7 94.9 68 88.5 77.5 71.5L77.5 71.5C67.6 80.4 53 81.5 41.9 74.1C30.9 66.8 26.2 52.9 30.7 40.3C35.1 27.8 47.4 19.9 60.7 21.1Z'),
+    _IconLayer(true, 0, 1.2, 'M60.7 21.1C42.9 13.2 22 20.8 13.6 38.4C5.1 55.9 12.1 77 29.4 86C46.7 94.9 68 88.5 77.5 71.5L77.5 71.5C67.6 80.4 53 81.5 41.9 74.1C30.9 66.8 26.2 52.9 30.7 40.3C35.1 27.8 47.4 19.9 60.7 21.1Z'),
+    _IconLayer(false, 0, 0, 'M66 33L68.1 40.8L75.2 36.8L71.2 43.9L79 46L71.2 48.1L75.2 55.2L68.1 51.2L66 59L63.9 51.2L56.8 55.2L60.8 48.1L53 46L60.8 43.9L56.8 36.8L63.9 40.8Z'),
+    _IconLayer(true, 1, 1.0, 'M66 33L68.1 40.8L75.2 36.8L71.2 43.9L79 46L71.2 48.1L75.2 55.2L68.1 51.2L66 59L63.9 51.2L56.8 55.2L60.8 48.1L53 46L60.8 43.9L56.8 36.8L63.9 40.8Z'),
+    _IconLayer(false, 1, 0, 'M68.4 46C68.4 47.3 67.3 48.4 66 48.4C64.7 48.4 63.6 47.3 63.6 46C63.6 44.7 64.7 43.6 66 43.6C67.3 43.6 68.4 44.7 68.4 46Z'),
+  ],
+  // مسجد
+  [
+    _IconLayer(false, 0, 0, 'M30 62C30 44 40 32 50 26C60 32 70 44 70 62Z'),
+    _IconLayer(false, 1, 0, 'M49 12L51 12L51 27L49 27Z'),
+    _IconLayer(false, 1, 0, 'M53 11C53 12.7 51.7 14 50 14C48.3 14 47 12.7 47 11C47 9.3 48.3 8 50 8C51.7 8 53 9.3 53 11Z'),
+    _IconLayer(false, 1, 0, 'M50 38.5L50.9 41.8L53.9 40.1L52.2 43.1L55.5 44L52.2 44.9L53.9 47.9L50.9 46.2L50 49.5L49.1 46.2L46.1 47.9L47.8 44.9L44.5 44L47.8 43.1L46.1 40.1L49.1 41.8Z'),
+    _IconLayer(false, 0, 0, 'M24 62L76 62L76 90L24 90Z'),
+    _IconLayer(false, 1, 0, 'M24 62L76 62L76 64.5L24 64.5Z'),
+    _IconLayer(false, 1, 0, 'M43 90L43 76C43 66 57 66 57 76L57 90Z'),
+    _IconLayer(false, 0, 0, 'M46 90L46 77C46 70 54 70 54 77L54 90Z'),
+    _IconLayer(false, 1, 0, 'M28 80L28 73Q31 68 34 73L34 80Z'),
+    _IconLayer(false, 1, 0, 'M66 80L66 73Q69 68 72 73L72 80Z'),
+    _IconLayer(false, 0, 0, 'M10 36L18 36L18 90L10 90Z'),
+    _IconLayer(false, 1, 0, 'M8 44L20 44L20 47L8 47Z'),
+    _IconLayer(false, 1, 0, 'M8 58L20 58L20 61L8 61Z'),
+    _IconLayer(false, 0, 0, 'M9 36L14 20L19 36Z'),
+    _IconLayer(false, 1, 0, 'M16 18C16 19.1 15.1 20 14 20C12.9 20 12 19.1 12 18C12 16.9 12.9 16 14 16C15.1 16 16 16.9 16 18Z'),
+    _IconLayer(false, 1, 0, 'M12.5 72L12.5 68Q14 66 15.5 68L15.5 72Z'),
+    _IconLayer(false, 0, 0, 'M82 36L90 36L90 90L82 90Z'),
+    _IconLayer(false, 1, 0, 'M80 44L92 44L92 47L80 47Z'),
+    _IconLayer(false, 1, 0, 'M80 58L92 58L92 61L80 61Z'),
+    _IconLayer(false, 0, 0, 'M81 36L86 20L91 36Z'),
+    _IconLayer(false, 1, 0, 'M88 18C88 19.1 87.1 20 86 20C84.9 20 84 19.1 84 18C84 16.9 84.9 16 86 16C87.1 16 88 16.9 88 18Z'),
+    _IconLayer(false, 1, 0, 'M84.5 72L84.5 68Q86 66 87.5 68L87.5 72Z'),
+    _IconLayer(false, 0, 0, 'M6 88L94 88L94 92L6 92Z'),
+  ],
+  // فانوس
+  [
+    _IconLayer(true, 1, 2.0, 'M40 18C40 2 60 2 60 18'),
+    _IconLayer(false, 1, 0, 'M53 5C53 6.7 51.7 8 50 8C48.3 8 47 6.7 47 5C47 3.3 48.3 2 50 2C51.7 2 53 3.3 53 5Z'),
+    _IconLayer(false, 0, 0, 'M32 30C36 22 44 20 50 14C56 20 64 22 68 30Z'),
+    _IconLayer(false, 1, 0, 'M30 30L70 30L70 35L30 35Z'),
+    _IconLayer(false, 0xFFFFE082, 0, 'M34 35L66 35C70 52 70 64 64 76L36 76C30 64 30 52 34 35Z'),
+    _IconLayer(false, 0x80FFC107, 0, 'M40 40L60 40C63 52 62 62 58 70L42 70C38 62 37 52 40 40Z'),
+    _IconLayer(true, 1, 2.0, 'M34 35L66 35C70 52 70 64 64 76L36 76C30 64 30 52 34 35Z'),
+    _IconLayer(true, 1, 1.2, 'M42 36C39.2 50 40 64 42 75'),
+    _IconLayer(true, 1, 1.2, 'M50 36C50 50 50 64 50 75'),
+    _IconLayer(true, 1, 1.2, 'M58 36C60.8 50 60 64 58 75'),
+    _IconLayer(true, 1, 1.0, 'M31 52L69 52'),
+    _IconLayer(false, 1, 0, 'M32 76L68 76L68 81L32 81Z'),
+    _IconLayer(false, 0, 0, 'M34 81L66 81L60 92L40 92Z'),
+    _IconLayer(false, 1, 0, 'M53 95C53 96.7 51.7 98 50 98C48.3 98 47 96.7 47 95C47 93.3 48.3 92 50 92C51.7 92 53 93.3 53 95Z'),
+    _IconLayer(false, 0, 0, 'M50 56L50.7 58.3L52.8 57.2L51.7 59.3L54 60L51.7 60.7L52.8 62.8L50.7 61.7L50 64L49.3 61.7L47.2 62.8L48.3 60.7L46 60L48.3 59.3L47.2 57.2L49.3 58.3Z'),
+  ],
+  // مصحف
+  [
+    _IconLayer(false, 0, 0, 'M22 88L50 72L78 88L72 92L50 80L28 92Z'),
+    _IconLayer(false, 0xFFFFF8E1, 0, 'M50 34C40 28 22 28 12 34L12 76C22 70 40 70 50 76Z'),
+    _IconLayer(false, 0xFFFFF8E1, 0, 'M50 34C60 28 78 28 88 34L88 76C78 70 60 70 50 76Z'),
+    _IconLayer(true, 1, 1.6, 'M50 34C40 28 22 28 12 34L12 76C22 70 40 70 50 76Z'),
+    _IconLayer(true, 1, 1.6, 'M50 34C60 28 78 28 88 34L88 76C78 70 60 70 50 76Z'),
+    _IconLayer(true, 0, 1.4, 'M50 34L50 76Z'),
+    _IconLayer(true, 0, 1.2, 'M18 44Q30 41 45 45'),
+    _IconLayer(true, 0, 1.2, 'M55 45Q70 41 82 44'),
+    _IconLayer(true, 0, 1.2, 'M18 50Q30 47 45 51'),
+    _IconLayer(true, 0, 1.2, 'M55 51Q70 47 82 50'),
+    _IconLayer(true, 0, 1.2, 'M18 56Q30 53 45 57'),
+    _IconLayer(true, 0, 1.2, 'M55 57Q70 53 82 56'),
+    _IconLayer(true, 0, 1.2, 'M18 62Q30 59 45 63'),
+    _IconLayer(true, 0, 1.2, 'M55 63Q70 59 82 62'),
+    _IconLayer(false, 1, 0, 'M50 6L51.6 12.1L57.1 8.9L53.9 14.4L60 16L53.9 17.6L57.1 23.1L51.6 19.9L50 26L48.4 19.9L42.9 23.1L46.1 17.6L40 16L46.1 14.4L42.9 8.9L48.4 12.1Z'),
+    _IconLayer(false, 0, 0, 'M52.6 16C52.6 17.4 51.4 18.6 50 18.6C48.6 18.6 47.4 17.4 47.4 16C47.4 14.6 48.6 13.4 50 13.4C51.4 13.4 52.6 14.6 52.6 16Z'),
+  ],
+];
+
+final _iconPathCache = <String, Path>{};
+
+Path _svgPath(String d) => _iconPathCache.putIfAbsent(d, () {
+      final p = Path();
+      final t = RegExp(r'[MLCQZ]|-?\d+\.?\d*')
+          .allMatches(d)
+          .map((m) => m[0]!)
+          .toList();
+      var i = 0;
+      double n() => double.parse(t[i++]);
+      while (i < t.length) {
+        final c = t[i++];
+        switch (c) {
+          case 'M':
+            p.moveTo(n(), n());
+          case 'L':
+            p.lineTo(n(), n());
+          case 'C':
+            p.cubicTo(n(), n(), n(), n(), n(), n());
+          case 'Q':
+            p.quadraticBezierTo(n(), n(), n(), n());
+          case 'Z':
+            p.close();
+        }
+      }
+      return p;
+    });
+
+/// يرسم الأيقونة [icon] (1..8) في مركز [center] بارتفاع [size]، مع هالة خفيفة خلفها
+void _paintIcon(
+    Canvas canvas, PdfTheme t, int icon, Offset center, double size) {
+  if (icon <= 0 || icon > _icons.length) return;
+  canvas.drawCircle(center, size * .62, _fillP(t.accent.withOpacity(.10)));
+  canvas.drawCircle(
+      center, size * .62, _stroke(t.accent.withOpacity(.55), .8));
+  canvas.save();
+  canvas.translate(center.dx - size / 2, center.dy - size / 2);
+  canvas.scale(size / 100);
+  for (final l in _icons[icon - 1]) {
+    final c = l.color == 0
+        ? t.dark
+        : (l.color == 1 ? t.accent : Color(l.color));
+    final p = _svgPath(l.d);
+    if (l.stroke) {
+      canvas.drawPath(
+          p,
+          Paint()
+            ..color = c
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = l.w
+            ..strokeJoin = StrokeJoin.round
+            ..strokeCap = StrokeCap.round);
+    } else {
+      canvas.drawPath(p, Paint()..color = c);
+    }
+  }
+  canvas.restore();
+}
 
 RRect _frameClip(int frame) {
   if (frame == _frameNone) {
@@ -566,9 +923,112 @@ void _paintHeaderExtra(Canvas canvas, PdfTheme t, int style, Rect rect) {
           _diamondMark(canvas, c, 5, t);
         }
       }
+    case 14: // مفصّص علوي
+      {
+        const n = 10;
+        final step = rect.width / n;
+        final p = Path()
+          ..moveTo(rect.left, rect.bottom)
+          ..lineTo(rect.left, rect.top + step / 2);
+        for (var i = 0; i < n; i++) {
+          p.arcToPoint(Offset(rect.left + (i + 1) * step, rect.top + step / 2),
+              radius: Radius.circular(step / 2), clockwise: true);
+        }
+        p
+          ..lineTo(rect.right, rect.bottom)
+          ..close();
+        canvas.drawPath(p, _fillP(t.accent.withOpacity(.13)));
+        canvas.drawPath(p, _stroke(t.accent, 2));
+      }
+    case 15: // قوس مدبّب داكن
+      {
+        final shoulder = rect.top + 40;
+        final p = Path()
+          ..moveTo(rect.left, rect.bottom)
+          ..lineTo(rect.left, shoulder)
+          ..quadraticBezierTo(
+              rect.left, rect.top + 14, rect.center.dx, rect.top)
+          ..quadraticBezierTo(
+              rect.right, rect.top + 14, rect.right, shoulder)
+          ..lineTo(rect.right, rect.bottom)
+          ..close();
+        canvas.drawPath(p, grad());
+        canvas.drawPath(p, _stroke(t.accent, 2.2));
+        canvas.drawPath(
+            Path()
+              ..moveTo(rect.left + 6, rect.bottom - 5)
+              ..lineTo(rect.left + 6, shoulder + 2)
+              ..quadraticBezierTo(
+                  rect.left + 6, rect.top + 20, rect.center.dx, rect.top + 7)
+              ..quadraticBezierTo(rect.right - 6, rect.top + 20,
+                  rect.right - 6, shoulder + 2)
+              ..lineTo(rect.right - 6, rect.bottom - 5),
+            _stroke(t.accent.withOpacity(.6), .8));
+      }
+    case 16: // لوح بنجوم
+      {
+        final rr = RRect.fromRectAndRadius(rect, const Radius.circular(8));
+        canvas.drawRRect(rr, _fillP(t.accent.withOpacity(.12)));
+        canvas.drawRRect(rr, _stroke(t.accent, 2));
+        canvas.drawRRect(
+            rr.deflate(6), _stroke(t.dark.withOpacity(.5), .8));
+        for (final c in [
+          rect.topLeft,
+          rect.topRight,
+          rect.bottomLeft,
+          rect.bottomRight,
+          rect.topCenter,
+          rect.bottomCenter,
+        ]) {
+          canvas.drawPath(_pdfStar(c, 9), _fillP(t.dark));
+          canvas.drawPath(_pdfStar(c, 9), _stroke(t.accent, 1.2));
+          canvas.drawCircle(c, 2.2, _fillP(t.accent));
+        }
+      }
+    case 17: // شريط ورقي بذيلين
+      {
+        const f = 18.0;
+        final l = rect.left, r = rect.right, tp = rect.top, bt = rect.bottom;
+        final tailL = Path()
+          ..moveTo(l, tp + 12)
+          ..lineTo(l + f + 6, tp + 12)
+          ..lineTo(l + f + 6, bt + 12)
+          ..lineTo(l, bt + 12)
+          ..lineTo(l + 9, (tp + bt) / 2 + 12)
+          ..close();
+        final tailR = Path()
+          ..moveTo(r, tp + 12)
+          ..lineTo(r - f - 6, tp + 12)
+          ..lineTo(r - f - 6, bt + 12)
+          ..lineTo(r, bt + 12)
+          ..lineTo(r - 9, (tp + bt) / 2 + 12)
+          ..close();
+        for (final tail in [tailL, tailR]) {
+          canvas.drawPath(tail, _fillP(darker));
+          canvas.drawPath(tail, _stroke(t.accent, 1.6));
+        }
+        final body = Rect.fromLTRB(l + f, tp, r - f, bt);
+        canvas.drawRect(body, grad());
+        canvas.drawRect(body, _stroke(t.accent, 2));
+        canvas.drawRect(
+            body.deflate(5), _stroke(t.accent.withOpacity(.55), .8));
+      }
     default:
       break;
   }
+}
+
+/// ورقة نباتية صغيرة تبدأ من [o] باتجاه [ang]
+void _leaf(Canvas c, Offset o, double ang, double len, double w, Paint p) {
+  c.save();
+  c.translate(o.dx, o.dy);
+  c.rotate(ang);
+  final path = Path()
+    ..moveTo(0, 0)
+    ..quadraticBezierTo(len * .5, -w, len, 0)
+    ..quadraticBezierTo(len * .5, w, 0, 0);
+  c.drawPath(path, p);
+  c.restore();
 }
 
 void _paintFrame(Canvas canvas, PdfTheme t, int frame) {
@@ -958,6 +1418,212 @@ void _paintFrame(Canvas canvas, PdfTheme t, int frame) {
           k++;
         }
       }
+    case 23:
+      {
+        // أوراق متسلسلة
+        canvas.drawRRect(
+            RRect.fromRectAndRadius(_inset(12), const Radius.circular(8)),
+            _stroke(t.accent, 1.6));
+        final r = _inset(21);
+        canvas.drawRect(r, _stroke(t.dark.withOpacity(.55), .8));
+        final pts = _pointsAlongRect(r, 15);
+        for (var k = 0; k < pts.length; k++) {
+          final p = pts[k];
+          final q = pts[(k + 1) % pts.length];
+          final dir = (q - p).direction;
+          final side = k.isEven ? -1.0 : 1.0;
+          _leaf(canvas, p, dir + side * .9, 9, 3.2,
+              _fillP(k % 4 < 2 ? t.accent : t.dark.withOpacity(.85)));
+        }
+      }
+    case 24:
+      {
+        // ربع الحزب في الزوايا
+        canvas.drawRRect(
+            RRect.fromRectAndRadius(_inset(14), const Radius.circular(3)),
+            _stroke(t.accent, 2));
+        canvas.drawRRect(
+            RRect.fromRectAndRadius(_inset(21), const Radius.circular(2)),
+            _stroke(t.dark.withOpacity(.6), .9));
+        final r = _inset(17.5);
+        for (final c in [r.topLeft, r.topRight, r.bottomLeft, r.bottomRight]) {
+          canvas.drawPath(_pdfStar(c, 15, .765), _fillP(t.dark));
+          canvas.drawPath(_pdfStar(c, 15, .765), _stroke(t.accent, 1.4));
+          canvas.drawPath(_pdfStar(c, 8, .765), _stroke(t.accent, 1));
+          canvas.drawCircle(c, 2.2, _fillP(t.accent));
+        }
+        for (final c in [
+          Offset(_pageW / 2, r.top),
+          Offset(_pageW / 2, r.bottom),
+          Offset(r.left, _pageH / 2),
+          Offset(r.right, _pageH / 2),
+        ]) {
+          _diamondMark(canvas, c, 6, t);
+        }
+      }
+    case 25:
+      {
+        // سلسلة معيّنات متصلة
+        canvas.drawRRect(
+            RRect.fromRectAndRadius(_inset(11), const Radius.circular(6)),
+            _stroke(t.accent, 1.4));
+        final pts = _pointsAlongRect(_inset(21), 16);
+        for (final p in pts) {
+          canvas.drawPath(_diamond(p, 9), _stroke(t.accent.withOpacity(.8), 1));
+        }
+        for (final p in pts) {
+          canvas.drawCircle(p, 1.6, _fillP(t.dark));
+        }
+        canvas.drawRRect(
+            RRect.fromRectAndRadius(_inset(32), const Radius.circular(2)),
+            _stroke(t.dark.withOpacity(.4), .7));
+      }
+    case 26:
+      {
+        // مربعات مثمّنة متبادلة
+        canvas.drawRRect(
+            RRect.fromRectAndRadius(_inset(11), const Radius.circular(5)),
+            _stroke(t.accent, 2));
+        final pts = _pointsAlongRect(_inset(22), 20);
+        for (var k = 0; k < pts.length; k++) {
+          final p = pts[k];
+          final s = k.isEven ? 6.0 : 4.0;
+          canvas.save();
+          canvas.translate(p.dx, p.dy);
+          canvas.rotate(math.pi / 4);
+          final box = Rect.fromCenter(
+              center: Offset.zero, width: s * 2, height: s * 2);
+          canvas.drawRect(box, _fillP(k.isEven ? t.dark : t.accent));
+          if (k.isEven) canvas.drawRect(box, _stroke(t.accent, 1));
+          canvas.restore();
+        }
+        canvas.drawRRect(
+            RRect.fromRectAndRadius(_inset(32), const Radius.circular(2)),
+            _stroke(t.dark.withOpacity(.5), .8));
+      }
+    case 27:
+      {
+        // هلال ونجوم في الزوايا
+        canvas.drawRRect(
+            RRect.fromRectAndRadius(_inset(12), const Radius.circular(10)),
+            _stroke(t.accent, 2));
+        canvas.drawRRect(
+            RRect.fromRectAndRadius(_inset(17), const Radius.circular(6)),
+            _stroke(t.dark.withOpacity(.55), .8));
+        final mid = Offset(_pageW / 2, _pageH / 2);
+        for (final c in const [
+          Offset(31, 31),
+          Offset(_pageW - 31, 31),
+          Offset(31, _pageH - 31),
+          Offset(_pageW - 31, _pageH - 31),
+        ]) {
+          final u = (mid - c) / (mid - c).distance;
+          final moon = Path.combine(
+              PathOperation.difference,
+              Path()..addOval(Rect.fromCircle(center: c, radius: 10)),
+              Path()
+                ..addOval(Rect.fromCircle(center: c + u * 4.6, radius: 8.4)));
+          canvas.drawPath(moon, _fillP(t.accent));
+          canvas.drawPath(_pdfStar(c + u * 5.5, 3.6), _fillP(t.dark));
+        }
+        for (final c in [
+          Offset(_pageW / 2, 14.5),
+          Offset(_pageW / 2, _pageH - 14.5),
+          Offset(14.5, _pageH / 2),
+          Offset(_pageW - 14.5, _pageH / 2),
+        ]) {
+          _diamondMark(canvas, c, 5, t);
+        }
+      }
+    case 28:
+      {
+        // شريط ذهبي متدرّج
+        final shader = ui.Gradient.linear(
+            const Offset(0, 0),
+            const Offset(_pageW, _pageH),
+            [
+              t.accent,
+              Color.lerp(t.accent, Colors.white, .55)!,
+              t.accent,
+              t.dark,
+              t.accent,
+            ],
+            const [0, .25, .5, .75, 1]);
+        canvas.drawRRect(
+            RRect.fromRectAndRadius(_inset(13), const Radius.circular(10)),
+            Paint()
+              ..shader = shader
+              ..style = PaintingStyle.stroke
+              ..strokeWidth = 7);
+        canvas.drawRRect(
+            RRect.fromRectAndRadius(_inset(20), const Radius.circular(6)),
+            _stroke(t.dark.withOpacity(.7), 1));
+        canvas.drawRRect(
+            RRect.fromRectAndRadius(_inset(9), const Radius.circular(12)),
+            _stroke(t.accent.withOpacity(.6), .8));
+      }
+    case 29:
+      {
+        // عقود مدبّبة أعلى الصفحة وأسفلها
+        canvas.drawRRect(
+            RRect.fromRectAndRadius(_inset(11), const Radius.circular(4)),
+            _stroke(t.accent, 1.6));
+        const n = 9;
+        const w = (_pageW - 32) / n;
+        void arches() {
+          for (var i = 0; i < n; i++) {
+            final x0 = 16 + i * w;
+            final p = Path()
+              ..moveTo(x0, 11)
+              ..lineTo(x0, 22)
+              ..quadraticBezierTo(x0, 30, x0 + w / 2, 34)
+              ..quadraticBezierTo(x0 + w, 30, x0 + w, 22)
+              ..lineTo(x0 + w, 11);
+            canvas.drawPath(p, _stroke(t.accent, 1.2));
+            canvas.drawCircle(Offset(x0 + w / 2, 21), 1.8, _fillP(t.dark));
+          }
+        }
+
+        arches();
+        canvas.save();
+        canvas.translate(0, _pageH);
+        canvas.scale(1, -1);
+        arches();
+        canvas.restore();
+      }
+    case 30:
+      {
+        // أزهار في الزوايا ومنتصف الأضلاع
+        canvas.drawRRect(
+            RRect.fromRectAndRadius(_inset(13), const Radius.circular(8)),
+            _stroke(t.accent, 1.8));
+        canvas.drawRRect(
+            RRect.fromRectAndRadius(_inset(19), const Radius.circular(5)),
+            _stroke(t.dark.withOpacity(.55), .8));
+        void flower(Offset c, double r) {
+          for (var i = 0; i < 8; i++) {
+            final a = i * math.pi / 4;
+            canvas.drawCircle(c + Offset(math.cos(a), math.sin(a)) * (r * .55),
+                r * .42, _stroke(t.accent, 1.1));
+          }
+          canvas.drawCircle(c, r * .32, _fillP(t.dark));
+          canvas.drawCircle(c, r * .32, _stroke(t.accent, 1));
+          canvas.drawCircle(c, r * .13, _fillP(t.accent));
+        }
+
+        final r = _inset(16);
+        for (final c in [r.topLeft, r.topRight, r.bottomLeft, r.bottomRight]) {
+          flower(c, 22);
+        }
+        for (final c in [
+          Offset(_pageW / 2, r.top),
+          Offset(_pageW / 2, r.bottom),
+          Offset(r.left, _pageH / 2),
+          Offset(r.right, _pageH / 2),
+        ]) {
+          flower(c, 13);
+        }
+      }
     default:
       break; // بدون إطار
   }
@@ -1040,6 +1706,7 @@ Future<Uint8List> buildPoemPdf({
   int frame = 0,
   int pattern = 0,
   int header = 0,
+  int icon = 0,
 }) async {
   // نفس ستايل النص الذي يستخدمه التطبيق داخل الصفحات (من الثيم)
   final baseStyle = (Theme.of(context).textTheme.bodyMedium ?? const TextStyle())
@@ -1123,7 +1790,7 @@ Future<Uint8List> buildPoemPdf({
           height: 1.4)),
       _avail - 60);
   final headerH = 30 + 22 + 10 + titleP.height + 10 + 16 + 10 + diwanP.height + 22;
-  const headerTop = 38.0;
+  final headerTop = 38.0 + (icon > 0 ? _iconBand : 0);
   final firstStart = headerTop + headerH + 26;
 
   // التذييل (الصفحة الأخيرة)
@@ -1166,6 +1833,7 @@ Future<Uint8List> buildPoemPdf({
     var py = _top;
     if (pi == 0) {
       _paintHeader(canvas, theme, header, headerTop, headerH, titleP, diwanP);
+      _paintIcon(canvas, theme, icon, const Offset(_pageW / 2, _iconCy), _iconSize);
       py = firstStart;
     }
     for (var k = 0; k < idx.length; k++) {
@@ -1225,8 +1893,9 @@ class _DesignPreview extends CustomPainter {
   final int frame;
   final int pattern;
   final int header;
-  const _DesignPreview(
-      this.theme, this.paper, this.text, this.frame, this.pattern, this.header);
+  final int icon;
+  const _DesignPreview(this.theme, this.paper, this.text, this.frame,
+      this.pattern, this.header, this.icon);
 
   TextPainter _tp(String s, TextStyle st) => TextPainter(
         text: TextSpan(text: s, style: st),
@@ -1257,10 +1926,12 @@ class _DesignPreview extends CustomPainter {
             fontSize: 14,
             height: 1.4));
     final headerH = 30 + 22 + 10 + title.height + 10 + 16 + 10 + diwan.height + 22;
-    _paintHeader(canvas, theme, header, 38, headerH, title, diwan);
+    final top = 38.0 + (icon > 0 ? _iconBand : 0);
+    _paintIcon(canvas, theme, icon, const Offset(_pageW / 2, _iconCy), _iconSize);
+    _paintHeader(canvas, theme, header, top, headerH, title, diwan);
 
     final bar = _fillP(text.withOpacity(.5));
-    var y = 38 + headerH + 30;
+    var y = top + headerH + 30;
     for (var k = 0; k < 7 && y < _pageH - 70; k++) {
       canvas.drawRRect(
           RRect.fromRectAndRadius(
@@ -1289,7 +1960,8 @@ typedef _Design = ({
   int paper,
   int frame,
   int pattern,
-  int header
+  int header,
+  int icon
 });
 
 /// نافذة اختيار التصميم (الإطار والنقوش والترويسة والألوان) مع معاينة حيّة.
@@ -1304,6 +1976,7 @@ Future<_Design?> _pickDesign(BuildContext context, String heading,
   var frameI = 0;
   var patI = 0;
   var headI = 0;
+  var iconI = 0;
 
   Widget swatch({
     required Widget dot,
@@ -1380,6 +2053,7 @@ Future<_Design?> _pickDesign(BuildContext context, String heading,
             frameI = r.nextInt(frameLabels.length);
             patI = r.nextInt(patternLabels.length);
             headI = r.nextInt(headerLabels.length);
+            iconI = r.nextInt(5) == 0 ? 0 : 1 + r.nextInt(iconLabels.length - 1);
           });
         }
 
@@ -1429,7 +2103,8 @@ Future<_Design?> _pickDesign(BuildContext context, String heading,
                             colorChoices[textI].color,
                             frameI,
                             patI,
-                            headI),
+                            headI,
+                            iconI),
                       ),
                     ),
                   ),
@@ -1440,6 +2115,8 @@ Future<_Design?> _pickDesign(BuildContext context, String heading,
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        title('أيقونة أعلى الصفحة الأولى'),
+                        chips(iconLabels, iconI, (i) => iconI = i),
                         title('شكل الإطار'),
                         chips(frameLabels, frameI, (i) => frameI = i),
                         title('نقوش الخلفية'),
@@ -1529,6 +2206,7 @@ Future<_Design?> _pickDesign(BuildContext context, String heading,
     frame: frameI,
     pattern: patI,
     header: headI,
+    icon: iconI,
   );
 }
 
@@ -1546,12 +2224,13 @@ Future<void> showPoemPdfSheet(
     d.frame,
     d.pattern,
     d.header,
+    d.icon,
   );
 }
 
 Future<void> _exportPdf(BuildContext context, Poem poem, String diwan,
     PdfTheme theme, Color text, Color paper, int frame, int pattern,
-    int header) async {
+    int header, int icon) async {
   final messenger = ScaffoldMessenger.of(context);
 
   void toast(String m) => messenger
@@ -1594,6 +2273,7 @@ Future<void> _exportPdf(BuildContext context, Poem poem, String diwan,
       frame: frame,
       pattern: pattern,
       header: header,
+      icon: icon,
     );
   } catch (_) {
     bytes = null;
@@ -1626,6 +2306,7 @@ Future<Uint8List> buildVerseImage({
   required Color paper,
   int frame = 0,
   int pattern = 0,
+  int icon = 0,
 }) async {
   final baseStyle = (Theme.of(context).textTheme.bodyMedium ?? const TextStyle())
       .copyWith(decoration: TextDecoration.none);
@@ -1710,7 +2391,8 @@ Future<Uint8List> buildVerseImage({
     versesH += sp[i].height + gapV + aj[i].height;
     if (i > 0) versesH += betweenVerses;
   }
-  final contentH = 24 + 12 + titleP.height + 12 + 16 + 28 + versesH + 28 + 16 +
+  final iconH = icon > 0 ? 66.0 : 0.0;
+  final contentH = iconH + 24 + 12 + titleP.height + 12 + 16 + 28 + versesH + 28 + 16 +
       12 + f1.height + 4 + f2.height;
   var y = math.max(70.0, (_pageH - contentH) / 2);
 
@@ -1719,6 +2401,10 @@ Future<Uint8List> buildVerseImage({
   canvas.scale(_scale);
   _paintPage(canvas, theme, paper, frame, pattern);
 
+  if (icon > 0) {
+    _paintIcon(canvas, theme, icon, Offset(_pageW / 2, y + 30), 52);
+    y += iconH;
+  }
   canvas.drawPath(
       _pdfStar(Offset(_pageW / 2, y + 12), 12), Paint()..color = theme.accent);
   y += 24 + 12;
@@ -1785,6 +2471,7 @@ Future<void> showVerseImageSheet(
   var paperI = 0;
   var frameI = 0;
   var patI = 0;
+  var iconI = 0;
   var textI = colorChoices.indexWhere((c) => c.color == poemFontColor.value);
   if (textI < 0) textI = 0;
   Future<Uint8List>? fut;
@@ -1839,12 +2526,24 @@ Future<void> showVerseImageSheet(
               paper: paperChoices[paperI].color,
               frame: frameI,
               pattern: patI,
+              icon: iconI,
             );
         fut ??= make();
         void change(VoidCallback f) => setS(() {
               f();
               fut = make();
             });
+
+        void shuffle() {
+          final r = math.Random();
+          change(() {
+            themeI = r.nextInt(pdfThemes.length);
+            paperI = r.nextInt(paperChoices.length);
+            frameI = r.nextInt(frameLabels.length);
+            patI = r.nextInt(patternLabels.length);
+            iconI = r.nextInt(5) == 0 ? 0 : 1 + r.nextInt(iconLabels.length - 1);
+          });
+        }
 
         Widget chips(List<String> labels, int sel, void Function(int) pick) =>
             Wrap(spacing: 8, runSpacing: 6, children: [
@@ -1871,7 +2570,9 @@ Future<void> showVerseImageSheet(
               children: [
                 Padding(
                   padding: const EdgeInsets.fromLTRB(20, 14, 20, 8),
-                  child: Align(
+                  child: Row(children: [
+                    Expanded(
+                      child: Align(
                     alignment: AlignmentDirectional.centerStart,
                     child: Text(
                         thirdVerse != null
@@ -1883,7 +2584,15 @@ Future<void> showVerseImageSheet(
                             fontSize: 19,
                             fontWeight: FontWeight.bold,
                             color: brown)),
-                  ),
+                    ),
+                    ),
+                    TextButton.icon(
+                      onPressed: shuffle,
+                      icon: Icon(Icons.shuffle_rounded, color: brown),
+                      label: Text('تصميم عشوائي',
+                          style: TextStyle(color: brown)),
+                    ),
+                  ]),
                 ),
                 SizedBox(
                   height: 300,
@@ -1915,6 +2624,8 @@ Future<void> showVerseImageSheet(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        title('أيقونة أعلى الصورة'),
+                        chips(iconLabels, iconI, (i) => iconI = i),
                         title('لون الإطار والزخرفة'),
                         SingleChildScrollView(
                           scrollDirection: Axis.horizontal,
@@ -2154,6 +2865,7 @@ Future<Uint8List> buildSalawatPdf({
   int frame = 0,
   int pattern = 0,
   int header = 0,
+  int icon = 0,
 }) async {
   final baseStyle = (Theme.of(context).textTheme.bodyMedium ?? const TextStyle())
       .copyWith(decoration: TextDecoration.none);
@@ -2198,7 +2910,7 @@ Future<Uint8List> buildSalawatPdf({
           height: 1.4)),
       _avail - 60);
   final headerH = 30 + 22 + 10 + titleP.height + 10 + 16 + 10 + subP.height + 22;
-  const headerTop = 38.0;
+  final headerTop = 38.0 + (icon > 0 ? _iconBand : 0);
   final firstStart = headerTop + headerH + 26;
 
   // توزيع الصيغ على الصفحات
@@ -2241,6 +2953,7 @@ Future<Uint8List> buildSalawatPdf({
     var py = _top;
     if (pi == 0) {
       _paintHeader(canvas, theme, header, headerTop, headerH, titleP, subP);
+      _paintIcon(canvas, theme, icon, const Offset(_pageW / 2, _iconCy), _iconSize);
       py = firstStart;
     }
     for (var k = 0; k < idx.length; k++) {
@@ -2335,6 +3048,7 @@ Future<void> showSalawatPdfSheet(BuildContext context, SalawatBook book,
       frame: d.frame,
       pattern: d.pattern,
       header: d.header,
+      icon: d.icon,
     );
   } catch (_) {
     bytes = null;
@@ -2360,9 +3074,11 @@ Future<Uint8List> buildSalawatImage({
   required Color paper,
   int frame = 0,
   int pattern = 0,
+  int icon = 0,
 }) async {
   final baseStyle = (Theme.of(context).textTheme.bodyMedium ?? const TextStyle())
       .copyWith(decoration: TextDecoration.none);
+  final iconH = icon > 0 ? 66.0 : 0.0;
 
   final titleP = _centeredPainter(
       title,
@@ -2378,7 +3094,7 @@ Future<Uint8List> buildSalawatImage({
   final creditH = _salawatCreditHeight(credit);
   var size = items.length == 1 ? 26.0 : (items.length == 2 ? 23.0 : 21.0);
   const between = 14.0 + 16 + 14; // فاصل زخرفي بين الصيغ
-  const maxH = _pageH - 2 * 74.0;
+  final maxH = _pageH - 2 * 74.0 - iconH;
   var paras = <_SalawatPara>[];
   var contentH = 0.0;
   for (var attempt = 0; attempt < 14; attempt++) {
@@ -2393,7 +3109,7 @@ Future<Uint8List> buildSalawatImage({
     ];
     final bodyH = paras.fold<double>(0, (a, p) => a + p.height) +
         (paras.length - 1) * between;
-    contentH = 24 + 12 + titleP.height + 12 + 16 + 28 + bodyH + 24 + 16 + 10 + creditH;
+    contentH = iconH + 24 + 12 + titleP.height + 12 + 16 + 28 + bodyH + 24 + 16 + 10 + creditH;
     if (contentH <= maxH || size <= 12) break;
     size = math.max(12, size * .92);
   }
@@ -2405,6 +3121,10 @@ Future<Uint8List> buildSalawatImage({
   canvas.scale(_scale);
   _paintPage(canvas, theme, paper, frame, pattern);
 
+  if (icon > 0) {
+    _paintIcon(canvas, theme, icon, Offset(_pageW / 2, y + 30), 52);
+    y += iconH;
+  }
   canvas.drawPath(
       _pdfStar(Offset(_pageW / 2, y + 12), 12), Paint()..color = theme.accent);
   y += 24 + 12;
@@ -2466,6 +3186,7 @@ Future<bool> showSalawatImageSheet(
   var paperI = 0;
   var frameI = 0;
   var patI = 0;
+  var iconI = 0;
   var textI =
       colorChoices.indexWhere((c) => c.color == salawatFonts.color.value);
   if (textI < 0) textI = 0;
@@ -2518,12 +3239,24 @@ Future<bool> showSalawatImageSheet(
               paper: paperChoices[paperI].color,
               frame: frameI,
               pattern: patI,
+              icon: iconI,
             );
         fut ??= make();
         void change(VoidCallback f) => setS(() {
               f();
               fut = make();
             });
+
+        void shuffle() {
+          final r = math.Random();
+          change(() {
+            themeI = r.nextInt(pdfThemes.length);
+            paperI = r.nextInt(paperChoices.length);
+            frameI = r.nextInt(frameLabels.length);
+            patI = r.nextInt(patternLabels.length);
+            iconI = r.nextInt(5) == 0 ? 0 : 1 + r.nextInt(iconLabels.length - 1);
+          });
+        }
 
         Widget chips(List<String> labels, int sel, void Function(int) pick) =>
             Wrap(spacing: 8, runSpacing: 6, children: [
@@ -2550,7 +3283,9 @@ Future<bool> showSalawatImageSheet(
               children: [
                 Padding(
                   padding: const EdgeInsets.fromLTRB(20, 14, 20, 8),
-                  child: Align(
+                  child: Row(children: [
+                    Expanded(
+                      child: Align(
                     alignment: AlignmentDirectional.centerStart,
                     child: Text(
                         items.length == 1
@@ -2560,7 +3295,15 @@ Future<bool> showSalawatImageSheet(
                             fontSize: 19,
                             fontWeight: FontWeight.bold,
                             color: brown)),
-                  ),
+                    ),
+                    ),
+                    TextButton.icon(
+                      onPressed: shuffle,
+                      icon: Icon(Icons.shuffle_rounded, color: brown),
+                      label: Text('تصميم عشوائي',
+                          style: TextStyle(color: brown)),
+                    ),
+                  ]),
                 ),
                 SizedBox(
                   height: 300,
@@ -2592,6 +3335,8 @@ Future<bool> showSalawatImageSheet(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        title('أيقونة أعلى الصورة'),
+                        chips(iconLabels, iconI, (i) => iconI = i),
                         title('لون الإطار والزخرفة'),
                         SingleChildScrollView(
                           scrollDirection: Axis.horizontal,
@@ -2706,6 +3451,85 @@ class _DPoem {
   double get titleH => title.height + 8 + 16 + 10;
 }
 
+class _DiwanCancelled implements Exception {}
+
+final _zlibFast = ZLibEncoder(level: 3);
+
+/// استراحة قصيرة ليتحدّث شريط التقدّم أثناء العمل الطويل
+Future<void> _uiBreath() =>
+    Future<void>.delayed(const Duration(milliseconds: 2));
+
+/// كاتب PDF بسيط: كل صفحة صورة RGB مضغوطة تُكتب مباشرة (بدون فكّ/إعادة ضغط).
+/// هذا هو سبب السرعة: مكتبة pdf كانت تفكّ كل صورة PNG ببطء ثم تُبقيها في الذاكرة.
+class _MiniPdf {
+  static const _wPt = '595.28';
+  static const _hPt = '841.89';
+  final _out = BytesBuilder(copy: false);
+  final _offsets = <int, int>{};
+  final _pageIds = <int>[];
+
+  _MiniPdf() {
+    _str('%PDF-1.4\n');
+    _out.add(const [0x25, 0xE2, 0xE3, 0xCF, 0xD3, 0x0A]);
+  }
+
+  void _str(String s) => _out.add(latin1.encode(s));
+
+  void _begin(int id) {
+    _offsets[id] = _out.length;
+    _str('$id 0 obj\n');
+  }
+
+  // أرقام الكائنات: 1 الفهرس، 2 الصفحات، 3 المعلومات، ثم لكل صفحة 3 كائنات
+  void addPage(Uint8List flateRgb, int w, int h) {
+    final pageId = 4 + 3 * _pageIds.length;
+    final contentId = pageId + 1;
+    final imgId = pageId + 2;
+    _pageIds.add(pageId);
+
+    _begin(imgId);
+    _str('<< /Type /XObject /Subtype /Image /Width $w /Height $h '
+        '/ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /FlateDecode '
+        '/Length ${flateRgb.length} >>\nstream\n');
+    _out.add(flateRgb);
+    _str('\nendstream\nendobj\n');
+
+    const content = 'q $_wPt 0 0 $_hPt 0 0 cm /Im0 Do Q';
+    _begin(contentId);
+    _str('<< /Length ${content.length} >>\nstream\n$content\nendstream\nendobj\n');
+
+    _begin(pageId);
+    _str('<< /Type /Page /Parent 2 0 R /MediaBox [0 0 $_wPt $_hPt] '
+        '/Resources << /XObject << /Im0 $imgId 0 R >> >> '
+        '/Contents $contentId 0 R >>\nendobj\n');
+  }
+
+  Uint8List finish(String title) {
+    _begin(2);
+    _str('<< /Type /Pages /Count ${_pageIds.length} '
+        '/Kids [${_pageIds.map((i) => '$i 0 R').join(' ')}] >>\nendobj\n');
+    _begin(1);
+    _str('<< /Type /Catalog /Pages 2 0 R >>\nendobj\n');
+    final hex = StringBuffer('FEFF');
+    for (final u in title.codeUnits) {
+      hex.write(u.toRadixString(16).padLeft(4, '0'));
+    }
+    _begin(3);
+    _str('<< /Title <$hex> /Producer (Dawawin Al-Noor) >>\nendobj\n');
+
+    final maxId = 3 + 3 * _pageIds.length;
+    final xrefPos = _out.length;
+    final sb = StringBuffer('xref\n0 ${maxId + 1}\n0000000000 65535 f \n');
+    for (var id = 1; id <= maxId; id++) {
+      sb.write('${_offsets[id]!.toString().padLeft(10, '0')} 00000 n \n');
+    }
+    sb.write('trailer\n<< /Size ${maxId + 1} /Root 1 0 R /Info 3 0 R >>\n'
+        'startxref\n$xrefPos\n%%EOF\n');
+    _str(sb.toString());
+    return _out.takeBytes();
+  }
+}
+
 Future<Uint8List> buildDiwanPdf({
   required BuildContext context,
   required String diwan,
@@ -2716,6 +3540,9 @@ Future<Uint8List> buildDiwanPdf({
   int frame = 0,
   int pattern = 0,
   int header = 0,
+  int icon = 0,
+  void Function(double progress)? onProgress,
+  bool Function()? isCancelled,
 }) async {
   final baseStyle = (Theme.of(context).textTheme.bodyMedium ?? const TextStyle())
       .copyWith(decoration: TextDecoration.none);
@@ -2788,7 +3615,9 @@ Future<Uint8List> buildDiwanPdf({
     ];
     laid.add(_DPoem(centered(poem.title, titleStyle, _avail), sadr, ajz, gapV,
         size * .95, hv));
-    if (pi % 3 == 2) await Future<void>.delayed(Duration.zero);
+    onProgress?.call(0.25 * (pi + 1) / poemsList.length);
+    if (isCancelled?.call() == true) throw _DiwanCancelled();
+    await _uiBreath();
   }
 
   // الترويسة (الصفحة الأولى): اسم الديوان وعدد قصائده
@@ -2811,7 +3640,7 @@ Future<Uint8List> buildDiwanPdf({
           height: 1.4)),
       _avail - 60);
   final headerH = 30 + 22 + 10 + titleP.height + 10 + 16 + 10 + subP.height + 22;
-  const headerTop = 38.0;
+  final headerTop = 38.0 + (icon > 0 ? _iconBand : 0);
   final firstStart = headerTop + headerH + 26;
 
   // التذييل (الصفحة الأخيرة) — نفس تذييل القصيدة
@@ -2876,6 +3705,7 @@ Future<Uint8List> buildDiwanPdf({
     var py = _top;
     if (pi == 0) {
       _paintHeader(canvas, theme, header, headerTop, headerH, titleP, subP);
+      _paintIcon(canvas, theme, icon, const Offset(_pageW / 2, _iconCy), _iconSize);
       py = firstStart;
     }
     for (var n = 0; n < idx.length; n++) {
@@ -2915,29 +3745,41 @@ Future<Uint8List> buildDiwanPdf({
     }
 
     final pic = rec.endRecording();
-    final img = await pic.toImage(
-        (_pageW * scale).round(), (_pageH * scale).round());
-    final bd = await img.toByteData(format: ui.ImageByteFormat.png);
+    final wPx = (_pageW * scale).round();
+    final hPx = (_pageH * scale).round();
+    final img = await pic.toImage(wPx, hPx);
+    final bd = await img.toByteData(format: ui.ImageByteFormat.rawRgba);
     img.dispose();
     pic.dispose();
-    return bd!.buffer.asUint8List();
+    final rgba = bd!.buffer.asUint8List(bd.offsetInBytes, bd.lengthInBytes);
+    final rgb = Uint8List(wPx * hPx * 3);
+    for (var s = 0, d = 0; s < rgba.length; s += 4, d += 3) {
+      final a = rgba[s + 3];
+      if (a == 255) {
+        rgb[d] = rgba[s];
+        rgb[d + 1] = rgba[s + 1];
+        rgb[d + 2] = rgba[s + 2];
+      } else {
+        rgb[d] = math.min(255, rgba[s] + 255 - a);
+        rgb[d + 1] = math.min(255, rgba[s + 1] + 255 - a);
+        rgb[d + 2] = math.min(255, rgba[s + 2] + 255 - a);
+      }
+    }
+    // ضغط سريع (zlib الأصلي) ثم يُكتب مباشرة داخل الـ PDF
+    return Uint8List.fromList(_zlibFast.convert(rgb));
   }
 
-  final doc = pw.Document();
+  final pdf = _MiniPdf();
+  final wPx = (_pageW * scale).round();
+  final hPx = (_pageH * scale).round();
   for (var pi = 0; pi < pages.length; pi++) {
-    final png = await renderPage(pi, pages[pi]);
-    final image = pw.MemoryImage(png);
-    doc.addPage(pw.Page(
-      pageFormat: PdfPageFormat.a4,
-      margin: pw.EdgeInsets.zero,
-      build: (_) => pw.FullPage(
-        ignoreMargins: true,
-        child: pw.Image(image, fit: pw.BoxFit.fill),
-      ),
-    ));
-    await Future<void>.delayed(Duration.zero);
+    if (isCancelled?.call() == true) throw _DiwanCancelled();
+    final flate = await renderPage(pi, pages[pi]);
+    pdf.addPage(flate, wPx, hPx);
+    onProgress?.call(0.25 + 0.75 * (pi + 1) / pages.length);
+    await _uiBreath();
   }
-  return doc.save();
+  return pdf.finish(diwan);
 }
 
 /// نافذة تصميم الـ PDF ثم إنشاء الديوان كله وحفظه في قسم «الملفات»
@@ -2957,6 +3799,10 @@ Future<void> showDiwanPdfSheet(
   final d = await _pickDesign(context, 'تحويل الديوان كله إلى PDF');
   if (d == null || !context.mounted) return;
 
+  final progress = ValueNotifier<double>(0);
+  final cancelled = ValueNotifier<bool>(false);
+  final clock = Stopwatch()..start();
+
   showDialog<void>(
     context: context,
     barrierDismissible: false,
@@ -2964,16 +3810,52 @@ Future<void> showDiwanPdfSheet(
       canPop: false,
       child: Dialog(
         child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const CircularProgressIndicator(),
-              const SizedBox(width: 18),
-              Flexible(
-                  child: Text(
-                      'جاري إنشاء ملف الديوان (${arDigits(list.length)} قصيدة)… قد يستغرق عدة دقائق')),
-            ],
+          padding: const EdgeInsets.fromLTRB(22, 22, 22, 10),
+          child: ValueListenableBuilder<double>(
+            valueListenable: progress,
+            builder: (_, p, __) {
+              var eta = 'جاري التحضير…';
+              if (p > 0.04 && p < 1) {
+                final left =
+                    (clock.elapsedMilliseconds * (1 - p) / p / 1000).ceil();
+                eta = left >= 60
+                    ? 'المتبقي حوالي ${arDigits((left / 60).ceil())} دقيقة'
+                    : 'المتبقي حوالي ${arDigits(math.max(left, 1))} ثانية';
+              }
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                      'جاري إنشاء ملف الديوان (${arDigits(list.length)} قصيدة)',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                          fontSize: 16, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 16),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: LinearProgressIndicator(
+                        value: p, minHeight: 10, color: brown),
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('${arDigits((p * 100).floor())}٪',
+                          style: const TextStyle(fontWeight: FontWeight.bold)),
+                      Text(eta),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Align(
+                    alignment: Alignment.center,
+                    child: TextButton(
+                        onPressed: () => cancelled.value = true,
+                        child: const Text('إلغاء')),
+                  ),
+                ],
+              );
+            },
           ),
         ),
       ),
@@ -2982,6 +3864,7 @@ Future<void> showDiwanPdfSheet(
   await Future<void>.delayed(const Duration(milliseconds: 150));
 
   Uint8List? bytes;
+  var wasCancelled = false;
   try {
     bytes = await buildDiwanPdf(
       context: context,
@@ -2993,12 +3876,24 @@ Future<void> showDiwanPdfSheet(
       frame: d.frame,
       pattern: d.pattern,
       header: d.header,
+      icon: d.icon,
+      onProgress: (p) => progress.value = p,
+      isCancelled: () => cancelled.value,
     );
+  } on _DiwanCancelled {
+    wasCancelled = true;
+    bytes = null;
   } catch (_) {
     bytes = null;
   }
   if (context.mounted) Navigator.of(context, rootNavigator: true).pop();
+  progress.dispose();
+  cancelled.dispose();
 
+  if (wasCancelled) {
+    toast('تم إلغاء إنشاء الملف');
+    return;
+  }
   if (bytes == null) {
     toast('تعذّر إنشاء الملف');
     return;
