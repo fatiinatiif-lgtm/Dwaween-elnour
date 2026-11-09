@@ -4,19 +4,20 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'main.dart';
+import 'pdf_export.dart';
 
 // ════════════════════════════════════════════════
 // قسم «الصلوات»
 //  • صفحة فيها ثلاث بطاقات (SalawatPage)
-//  • صفحة قراءة: كل صيغة في سطر مستقل، كل الأسطر مضبوطة بالكشيدة،
-//    بين كل صيغة والتي تليها فاصل القلوب، والتمرير سلس.
-//  • النصوص في ملفات txt داخل assets/salawat/
+//  • صفحة قراءة (SalawatReadPage): نص نثري مضبوط الأسطر بالكشيدة
+//    فكل سطر يبدأ من أول العرض وينتهي بآخره، بلا فراغات.
+//  • النصوص نفسها في ملفات txt داخل assets/salawat/ (انظري الشرح في الأسفل)
 // ════════════════════════════════════════════════
 
 enum SalawatKind {
   numbered, // صلوات مرقّمة بصيغة {1} {2} ...
   letters, // مرتّبة على الحروف (حرف الهمزة، حرف الباء ...)
-  munajat, // مناجاة
+  munajat, // مناجاة: سطور قصيرة تُدمج في فقرة واحدة متصلة
 }
 
 class SalawatBook {
@@ -59,7 +60,7 @@ const salawatBooks = <SalawatBook>[
   ),
 ];
 
-// ───────────── قراءة الملفات وتقسيمها إلى صيغ ─────────────
+// ───────────── قراءة الملفات وتقسيمها إلى فقرات ─────────────
 
 class SBlock {
   final String text;
@@ -92,59 +93,99 @@ Future<List<SBlock>> loadSalawat(SalawatBook book) async {
 
 final RegExp _numRe = RegExp(r'^\s*\{\s*(\d+)\s*\}\s*(.*)$');
 
-/// كل سطر في الملف = صيغة مستقلة بنفس الترتيب، بدون أي دمج.
-/// السطر اللي يبدأ بـ {رقم} يحمل رقمه، وسطر العنوان ((...)) يُتجاهل.
+/// كل سطر يبدأ بـ {رقم} فقرة مستقلة بنفس رقمها.
+/// سطر العنوان ((...)) يُتجاهل، وأي سطر بلا رقم يُلحق بالفقرة التي قبله.
 List<SBlock> _parseNumbered(List<String> lines) {
   final out = <SBlock>[];
   for (final raw in lines) {
     final line = _clean(raw);
-    if (line.isEmpty || line.startsWith('((')) continue;
+    if (line.isEmpty) continue;
     final m = _numRe.firstMatch(line);
     if (m != null) {
       out.add(SBlock(_clean(m.group(2)!), number: int.parse(m.group(1)!)));
-    } else {
-      out.add(SBlock(line));
+    } else if (line.startsWith('((')) {
+      continue;
+    } else if (out.isNotEmpty) {
+      final last = out.removeLast();
+      out.add(SBlock('${last.text} $line', number: last.number));
     }
   }
   return out;
 }
 
-/// «حرف ...» و«صيغة الحروف...» عناوين، وكل سطر غيرهم صيغة مستقلة.
+/// «حرف ...» و«صيغة الحروف...» عناوين.
+/// كل سطر يبدأ بـ «اللهم» يفتح فقرة جديدة، وأسطر «وصلّ وسلّم...» التي بعده
+/// تتصل به في نفس الفقرة (لأن الأسطر القصيرة لا تُضبط بالكشيدة بشكل جميل).
 List<SBlock> _parseLetters(List<String> lines) {
   final out = <SBlock>[];
+  final cur = StringBuffer();
+  void flush() {
+    if (cur.isNotEmpty) {
+      out.add(SBlock(cur.toString().trim()));
+      cur.clear();
+    }
+  }
+
   for (final raw in lines) {
     final line = _clean(raw);
     if (line.isEmpty || line.startsWith('((')) continue;
     final p = _plain(line);
     if (p.startsWith('حرف ') || p.startsWith('صيغة الحروف')) {
+      flush();
       out.add(SBlock(line, heading: true));
+    } else if (p.startsWith('اللهم')) {
+      flush();
+      cur.write(line);
     } else {
-      out.add(SBlock(line));
+      if (cur.isNotEmpty) cur.write(' ');
+      cur.write(line);
     }
   }
+  flush();
   return out;
 }
 
-/// سطر العنوان الأول يُتجاهل (موجود في الترويسة)، وكل سطر بعده صيغة مستقلة.
+/// سطر العنوان الأول يُتجاهل (العنوان موجود في الترويسة).
+/// أسطر «الصلاة والسلام عليك يا ...» القصيرة تُدمج في فقرة واحدة متصلة،
+/// والأسطر الطويلة (الافتتاح والخاتمة) كل واحد منها فقرة مستقلة.
+const int _shortLineMax = 80; // عدد الحروف (بلا تشكيل) الفاصل بين القصير والطويل
+
 List<SBlock> _parseMunajat(List<String> lines) {
   final out = <SBlock>[];
+  final run = StringBuffer();
+  void flush() {
+    if (run.isNotEmpty) {
+      out.add(SBlock(run.toString().trim()));
+      run.clear();
+    }
+  }
+
   var first = true;
   for (final raw in lines) {
     final line = _clean(raw);
     if (line.isEmpty) continue;
+    final p = _plain(line);
     if (first) {
       first = false;
-      final p = _plain(line);
       if (p.length <= 30 && !p.startsWith('اللهم')) continue; // العنوان
     }
-    out.add(SBlock(line));
+    if (p.length <= _shortLineMax && p.startsWith('الصلاة والسلام عليك')) {
+      if (run.isNotEmpty) run.write(' ');
+      run.write(line);
+    } else {
+      flush();
+      out.add(SBlock(line));
+    }
   }
+  flush();
   return out;
 }
 
-// ───────────── كسر الصيغة إلى أسطر متقاربة الامتلاء ─────────────
+// ───────────── كسر الفقرة إلى أسطر متقاربة الامتلاء ─────────────
 
-List<String> _breakLines(String text, TextStyle st, double width) {
+/// يقسم الفقرة إلى أسطر بحيث تكون الفراغات المتبقية في الأسطر كلها
+/// أقل ما يمكن (فتحتاج الكشيدة إلى مدّ بسيط في كل سطر، لا مدّ كبير في سطر واحد).
+List<String> salawatBreakLines(String text, TextStyle st, double width) {
   final words = text.trim().split(RegExp(r'\s+'));
   if (words.length <= 1) return [text.trim()];
 
@@ -368,6 +409,17 @@ class _SalawatReadPageState extends State<SalawatReadPage> {
   late final Future<List<SBlock>> _future =
       loadSalawat(widget.book).then((b) => _blocks = b);
 
+  // وضع اختيار الصيغ لحفظها كصورة (من 1 إلى 3)
+  bool _selecting = false;
+  final Set<int> _selected = {};
+
+  String get _sub {
+    final b = _blocks ?? const <SBlock>[];
+    return widget.book.kind == SalawatKind.numbered
+        ? '${arDigits(b.where((x) => x.number != null).length)} صلاة'
+        : widget.book.blurb;
+  }
+
   String get _fullText {
     final b = StringBuffer()..writeln(widget.book.title)..writeln();
     for (final x in _blocks ?? const <SBlock>[]) {
@@ -395,6 +447,35 @@ class _SalawatReadPageState extends State<SalawatReadPage> {
       ));
   }
 
+  void _toggle(int i) {
+    if (_selected.contains(i)) {
+      setState(() => _selected.remove(i));
+    } else if (_selected.length >= 3) {
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(const SnackBar(
+          content: Text('الحد الأقصى ثلاث صيغ', textAlign: TextAlign.center),
+          duration: Duration(seconds: 2),
+        ));
+    } else {
+      setState(() => _selected.add(i));
+    }
+  }
+
+  void _cancelSelect() => setState(() {
+        _selecting = false;
+        _selected.clear();
+      });
+
+  Future<void> _saveImage() async {
+    final blocks = _blocks;
+    if (blocks == null || _selected.isEmpty) return;
+    final idx = _selected.toList()..sort();
+    final items = [for (final i in idx) blocks[i]];
+    final done = await showSalawatImageSheet(context, widget.book.title, items);
+    if (done && mounted) _cancelSelect();
+  }
+
   @override
   Widget build(BuildContext context) {
     final book = widget.book;
@@ -408,8 +489,80 @@ class _SalawatReadPageState extends State<SalawatReadPage> {
               tooltip: 'نسخ النص',
               icon: const Icon(Icons.copy_rounded),
               onPressed: _copy),
+          PopupMenuButton<String>(
+            tooltip: 'خيارات',
+            icon: const Icon(Icons.more_vert_rounded),
+            color: cream,
+            onSelected: (v) {
+              final blocks = _blocks;
+              if (blocks == null) return;
+              if (v == 'pdf') {
+                showSalawatPdfSheet(context, book, blocks, _sub);
+              } else if (v == 'image') {
+                setState(() {
+                  _selecting = true;
+                  _selected.clear();
+                });
+              }
+            },
+            itemBuilder: (_) => [
+              PopupMenuItem(
+                value: 'pdf',
+                child: Row(children: [
+                  Icon(Icons.picture_as_pdf_rounded, color: brown),
+                  const SizedBox(width: 10),
+                  const Text('تحويل القسم إلى PDF'),
+                ]),
+              ),
+              PopupMenuItem(
+                value: 'image',
+                child: Row(children: [
+                  Icon(Icons.image_rounded, color: brown),
+                  const SizedBox(width: 10),
+                  const Text('حفظ صيغة أو أكثر كصورة'),
+                ]),
+              ),
+            ],
+          ),
         ],
       ),
+      bottomNavigationBar: _selecting
+          ? Material(
+              color: cream,
+              elevation: 8,
+              child: SafeArea(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 8, 14, 8),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          _selected.isEmpty
+                              ? 'اضغطي على الصيغ (حتى ٣)'
+                              : 'تم اختيار ${arDigits(_selected.length)} من ٣',
+                          style: TextStyle(
+                              color: brownDark, fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: _cancelSelect,
+                        child: Text('إلغاء', style: TextStyle(color: brown)),
+                      ),
+                      const SizedBox(width: 6),
+                      FilledButton.icon(
+                        style: FilledButton.styleFrom(
+                            backgroundColor: brown,
+                            foregroundColor: Colors.white),
+                        onPressed: _selected.isEmpty ? null : _saveImage,
+                        icon: const Icon(Icons.image_rounded),
+                        label: const Text('حفظ كصورة'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            )
+          : null,
       body: FutureBuilder<List<SBlock>>(
         future: _future,
         builder: (ctx, snap) {
@@ -430,14 +583,14 @@ class _SalawatReadPageState extends State<SalawatReadPage> {
               ),
             );
           }
-          final sub = book.kind == SalawatKind.numbered
-              ? '${arDigits(blocks.where((b) => b.number != null).length)} صلاة'
-              : book.blurb;
           return SalawatList(
             title: book.title,
-            sub: sub,
+            sub: _sub,
             colors: dc,
             blocks: blocks,
+            selecting: _selecting,
+            selected: _selected,
+            onToggle: _toggle,
           );
         },
       ),
@@ -458,12 +611,18 @@ class SalawatList extends StatefulWidget {
   final String sub;
   final (Color, Color) colors;
   final List<SBlock> blocks;
+  final bool selecting;
+  final Set<int> selected;
+  final void Function(int) onToggle;
   const SalawatList({
     super.key,
     required this.title,
     required this.sub,
     required this.colors,
     required this.blocks,
+    this.selecting = false,
+    this.selected = const <int>{},
+    required this.onToggle,
   });
   @override
   State<SalawatList> createState() => _SalawatListState();
@@ -496,7 +655,7 @@ class _SalawatListState extends State<SalawatList> {
     if (b.heading) return _Laid(b, const []);
     var t = displayText(b.text);
     if (b.number != null) t = '(${arDigits(b.number!)}) $t';
-    final lines = _breakLines(t, _style, _w);
+    final lines = salawatBreakLines(t, _style, _w);
     return _Laid(b, [
       for (final l in lines)
         justifyHemistich(l, _style, _w, maxPerSlot: 16, maxWordSpacing: 24),
@@ -565,15 +724,33 @@ class _SalawatListState extends State<SalawatList> {
     );
   }
 
-  Widget _paragraph(_Laid l) {
+  Widget _paragraph(_Laid l, int index) {
     final numbered = l.block.number != null;
-    return Column(
+    final col = Column(
       children: [
         for (var k = 0; k < l.lines.length; k++) ...[
           if (k > 0) SizedBox(height: _size * .62),
           _line(l.lines[k], numberedFirst: numbered && k == 0),
         ],
       ],
+    );
+    if (!widget.selecting) return col;
+    // وضع الاختيار: الضغط على الصيغة يختارها (تتلوّن بالذهبي)
+    final sel = widget.selected.contains(index);
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => widget.onToggle(index),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        decoration: BoxDecoration(
+          color: sel ? accentGold.withOpacity(.22) : Colors.transparent,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+              color: sel ? accentGold : accentGold.withOpacity(.3),
+              width: sel ? 1.8 : 1),
+        ),
+        child: col,
+      ),
     );
   }
 
@@ -596,7 +773,7 @@ class _SalawatListState extends State<SalawatList> {
       }
       kids.add(isHead
           ? _heading(widget.blocks[i].text, withTop: i > start)
-          : _paragraph(_laidAt(i)));
+          : _paragraph(_laidAt(i), i));
     }
     return Column(children: kids);
   }

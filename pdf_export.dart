@@ -10,6 +10,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'main.dart';
 import 'poems_data.dart';
 import 'saved_files.dart';
+import 'salawat_page.dart';
 
 // ════════════════════════════════════════════════
 // تصدير القصيدة إلى PDF
@@ -1281,8 +1282,19 @@ class _DesignPreview extends CustomPainter {
 
 // ───────────── نافذة الخيارات + الحفظ ─────────────
 
-Future<void> showPoemPdfSheet(
-    BuildContext context, Poem poem, String diwan) async {
+/// اختيارات تصميم الـ PDF
+typedef _Design = ({
+  int theme,
+  int text,
+  int paper,
+  int frame,
+  int pattern,
+  int header
+});
+
+/// نافذة اختيار التصميم (الإطار والنقوش والترويسة والألوان) مع معاينة حيّة.
+/// ترجع null لو أُغلقت النافذة بدون إنشاء.
+Future<_Design?> _pickDesign(BuildContext context, String heading) async {
   var themeI = 0;
   var textI = colorChoices.indexWhere((c) => c.color == poemFontColor.value);
   if (textI < 0) textI = 0;
@@ -1379,7 +1391,7 @@ Future<void> showPoemPdfSheet(
                   child: Row(
                     children: [
                       Expanded(
-                        child: Text('تحويل القصيدة إلى PDF',
+                        child: Text(heading,
                             style: TextStyle(
                                 fontSize: 19,
                                 fontWeight: FontWeight.bold,
@@ -1507,17 +1519,31 @@ Future<void> showPoemPdfSheet(
     ),
   );
 
-  if (go != true || !context.mounted) return;
+  if (go != true) return null;
+  return (
+    theme: themeI,
+    text: textI,
+    paper: paperI,
+    frame: frameI,
+    pattern: patI,
+    header: headI,
+  );
+}
+
+Future<void> showPoemPdfSheet(
+    BuildContext context, Poem poem, String diwan) async {
+  final d = await _pickDesign(context, 'تحويل القصيدة إلى PDF');
+  if (d == null || !context.mounted) return;
   await _exportPdf(
     context,
     poem,
     diwan,
-    pdfThemes[themeI],
-    colorChoices[textI].color,
-    paperChoices[paperI].color,
-    frameI,
-    patI,
-    headI,
+    pdfThemes[d.theme],
+    colorChoices[d.text].color,
+    paperChoices[d.paper].color,
+    d.frame,
+    d.pattern,
+    d.header,
   );
 }
 
@@ -1975,4 +2001,630 @@ Future<void> showVerseImageSheet(
       },
     ),
   );
+}
+
+
+// ════════════════════════════════════════════════
+// الصلوات: PDF للقسم كاملًا + صورة لصيغة إلى ثلاث صيغ
+// (نفس تصميم القصائد: الإطار والنقوش والترويسة والألوان)
+// ════════════════════════════════════════════════
+
+/// صيغة واحدة (أو عنوان) بعد ضبط أسطرها بالكشيدة
+class _SalawatPara {
+  final bool heading;
+  final List<TextPainter> lines;
+  final double lineGap;
+  final double height;
+  _SalawatPara(this.heading, this.lines, this.lineGap)
+      : height = lines.fold<double>(0, (a, p) => a + p.height) +
+            (lines.length > 1 ? (lines.length - 1) * lineGap : 0);
+}
+
+/// سطر واحد مضبوط بالكشيدة (ورقم الصلاة في أول سطر يُلوَّن)
+TextPainter _salawatLine(Justified j, TextStyle style, double hw,
+    {Color? numberColor}) {
+  final List<InlineSpan> kids;
+  final sp = j.text.indexOf(' ');
+  if (numberColor != null && sp > 0) {
+    kids = [
+      TextSpan(
+          text: j.text.substring(0, sp), style: TextStyle(color: numberColor)),
+      TextSpan(text: j.text.substring(sp)),
+    ];
+  } else {
+    kids = [TextSpan(text: j.text)];
+  }
+  return TextPainter(
+    text: TextSpan(
+      style: style.copyWith(
+          wordSpacing: j.wordSpacing, height: j.fits ? 1.0 : 1.7),
+      children: kids,
+    ),
+    textDirection: TextDirection.rtl,
+    textAlign: TextAlign.right,
+    textScaler: TextScaler.noScaling,
+  )..layout(minWidth: hw, maxWidth: j.fits ? hw + 2 : hw);
+}
+
+_SalawatPara _makeSalawatPara(
+    SBlock b, TextStyle style, double hw, double size, PdfTheme theme) {
+  if (b.heading) {
+    final tp = TextPainter(
+      text: TextSpan(
+        text: displayText(b.text),
+        style: style.copyWith(
+            color: theme.dark,
+            fontWeight: FontWeight.bold,
+            fontSize: size * .95,
+            height: 1.3),
+      ),
+      textDirection: TextDirection.rtl,
+      textAlign: TextAlign.center,
+      textScaler: TextScaler.noScaling,
+    )..layout(minWidth: hw, maxWidth: hw);
+    return _SalawatPara(true, [tp], 0);
+  }
+  var t = displayText(b.text);
+  if (b.number != null) t = '(${arDigits(b.number!)}) $t';
+  final lines = salawatBreakLines(t, style, hw);
+  final painters = <TextPainter>[];
+  for (var k = 0; k < lines.length; k++) {
+    final j = justifyHemistich(lines[k], style, hw,
+        maxPerSlot: 16, maxWordSpacing: 24);
+    painters.add(_salawatLine(j, style, hw,
+        numberColor: (b.number != null && k == 0) ? theme.accent : null));
+  }
+  return _SalawatPara(false, painters, size * .62);
+}
+
+/// يرسم الصيغة ويرجع الإحداثي الرأسي بعدها
+double _paintSalawatPara(Canvas canvas, _SalawatPara p, double y) {
+  if (p.heading) {
+    p.lines.first.paint(canvas, Offset(_mx, y));
+    return y + p.height;
+  }
+  var py = y;
+  for (var k = 0; k < p.lines.length; k++) {
+    if (k > 0) py += p.lineGap;
+    final tp = p.lines[k];
+    tp.paint(canvas, Offset(_mx + _avail - tp.width, py));
+    py += tp.height;
+  }
+  return py;
+}
+
+TextPainter _centeredPainter(String text, TextStyle s, double width) =>
+    TextPainter(
+      text: TextSpan(text: text, style: s),
+      textDirection: TextDirection.rtl,
+      textAlign: TextAlign.center,
+      textScaler: TextScaler.noScaling,
+    )..layout(minWidth: width, maxWidth: width);
+
+// ───────────── القسم كاملًا كملف PDF ─────────────
+
+Future<Uint8List> buildSalawatPdf({
+  required BuildContext context,
+  required String title,
+  required String subtitle,
+  required List<SBlock> blocks,
+  required PdfTheme theme,
+  required Color textColor,
+  required Color paper,
+  int frame = 0,
+  int pattern = 0,
+  int header = 0,
+}) async {
+  final baseStyle = (Theme.of(context).textTheme.bodyMedium ?? const TextStyle())
+      .copyWith(decoration: TextDecoration.none);
+
+  final size = math.min(poemFontSize.value, 19.0);
+  final style = withPoemFont(baseStyle.merge(TextStyle(
+    fontSize: size,
+    height: 1.0,
+    color: textColor,
+    fontWeight: poemFontWeight,
+  )));
+  const hw = _avail;
+
+  // ضبط كل الصيغ (مع استراحة قصيرة حتى لا تتجمّد دائرة الانتظار)
+  final paras = <_SalawatPara>[];
+  for (var i = 0; i < blocks.length; i++) {
+    paras.add(_makeSalawatPara(blocks[i], style, hw, size, theme));
+    if (i % 6 == 5) await Future<void>.delayed(Duration.zero);
+  }
+
+  // الترويسة (الصفحة الأولى)
+  final darkHeader = _headerDark(header);
+  final titleP = _centeredPainter(
+      title,
+      baseStyle.merge(TextStyle(
+          color: darkHeader ? Colors.white : theme.dark,
+          fontSize: 22,
+          height: 1.5,
+          fontWeight: FontWeight.bold)),
+      _avail - 60);
+  final subP = _centeredPainter(
+      subtitle,
+      baseStyle.merge(TextStyle(
+          color: darkHeader
+              ? const Color(0xFFE8D9BC)
+              : Color.lerp(theme.accent, Colors.black, .35),
+          fontSize: 14,
+          height: 1.4)),
+      _avail - 60);
+  final headerH = 30 + 22 + 10 + titleP.height + 10 + 16 + 10 + subP.height + 22;
+  const headerTop = 38.0;
+  final firstStart = headerTop + headerH + 26;
+
+  // توزيع الصيغ على الصفحات
+  final gap = size * .95;
+  final divSpace = gap * .6 + 16 + gap * .6;
+  final pages = <List<int>>[<int>[]];
+  var y = firstStart;
+  for (var i = 0; i < paras.length; i++) {
+    var need = paras[i].height;
+    // العنوان لا يبقى وحده في آخر الصفحة
+    if (paras[i].heading && i + 1 < paras.length) {
+      need += gap + paras[i + 1].height;
+    }
+    var before = 0.0;
+    if (pages.last.isNotEmpty) {
+      before = (paras[i - 1].heading || paras[i].heading) ? gap : divSpace;
+    }
+    if (pages.last.isNotEmpty && y + before + need > _bottom) {
+      pages.add(<int>[]);
+      y = _top;
+      before = 0;
+    }
+    y += before + paras[i].height;
+    pages.last.add(i);
+  }
+
+  const scale = 2.5;
+  Future<Uint8List> renderPage(int pi, List<int> idx) async {
+    final rec = ui.PictureRecorder();
+    final canvas = Canvas(rec);
+    canvas.scale(scale);
+    _paintPage(canvas, theme, paper, frame, pattern);
+
+    var py = _top;
+    if (pi == 0) {
+      _paintHeader(canvas, theme, header, headerTop, headerH, titleP, subP);
+      py = firstStart;
+    }
+    for (var k = 0; k < idx.length; k++) {
+      final i = idx[k];
+      if (k > 0) {
+        if (paras[i - 1].heading || paras[i].heading) {
+          py += gap;
+        } else {
+          py += gap * .6;
+          _divider(canvas, _pageW / 2, py + 8, _avail * .9, theme.accent);
+          py += 16 + gap * .6;
+        }
+      }
+      py = _paintSalawatPara(canvas, paras[i], py);
+    }
+
+    final pic = rec.endRecording();
+    final img = await pic.toImage(
+        (_pageW * scale).round(), (_pageH * scale).round());
+    final bd = await img.toByteData(format: ui.ImageByteFormat.png);
+    img.dispose();
+    pic.dispose();
+    return bd!.buffer.asUint8List();
+  }
+
+  final doc = pw.Document();
+  for (var pi = 0; pi < pages.length; pi++) {
+    final png = await renderPage(pi, pages[pi]);
+    final image = pw.MemoryImage(png);
+    doc.addPage(pw.Page(
+      pageFormat: PdfPageFormat.a4,
+      margin: pw.EdgeInsets.zero,
+      build: (_) => pw.FullPage(
+        ignoreMargins: true,
+        child: pw.Image(image, fit: pw.BoxFit.fill),
+      ),
+    ));
+    await Future<void>.delayed(Duration.zero);
+  }
+  return doc.save();
+}
+
+/// نافذة تصميم الـ PDF للقسم كاملًا ثم الإنشاء والحفظ
+Future<void> showSalawatPdfSheet(BuildContext context, SalawatBook book,
+    List<SBlock> blocks, String subtitle) async {
+  final d = await _pickDesign(context, 'تحويل القسم إلى PDF');
+  if (d == null || !context.mounted) return;
+
+  final messenger = ScaffoldMessenger.of(context);
+  void toast(String m) => messenger
+    ..hideCurrentSnackBar()
+    ..showSnackBar(SnackBar(
+        content: Text(m, textAlign: TextAlign.center),
+        duration: const Duration(seconds: 3)));
+
+  showDialog<void>(
+    context: context,
+    barrierDismissible: false,
+    builder: (_) => const PopScope(
+      canPop: false,
+      child: Dialog(
+        child: Padding(
+          padding: EdgeInsets.all(24),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(width: 18),
+              Flexible(child: Text('جاري إنشاء ملف PDF… قد يستغرق دقيقة')),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
+  await Future<void>.delayed(const Duration(milliseconds: 150));
+
+  Uint8List? bytes;
+  try {
+    bytes = await buildSalawatPdf(
+      context: context,
+      title: book.title,
+      subtitle: subtitle,
+      blocks: blocks,
+      theme: pdfThemes[d.theme],
+      textColor: colorChoices[d.text].color,
+      paper: paperChoices[d.paper].color,
+      frame: d.frame,
+      pattern: d.pattern,
+      header: d.header,
+    );
+  } catch (_) {
+    bytes = null;
+  }
+  if (context.mounted) Navigator.of(context, rootNavigator: true).pop();
+
+  if (bytes == null) {
+    toast('تعذّر إنشاء الملف');
+    return;
+  }
+  final inApp = await SavedFiles.save(SavedKind.pdf, book.title, bytes);
+  toast(inApp != null ? 'تم حفظ الملف في قسم «الملفات»' : 'تعذّر حفظ الملف');
+}
+
+// ───────────── صيغة إلى ثلاث صيغ كصورة ─────────────
+
+Future<Uint8List> buildSalawatImage({
+  required BuildContext context,
+  required String title,
+  required List<SBlock> items, // من 1 إلى 3
+  required PdfTheme theme,
+  required Color textColor,
+  required Color paper,
+  int frame = 0,
+  int pattern = 0,
+}) async {
+  final baseStyle = (Theme.of(context).textTheme.bodyMedium ?? const TextStyle())
+      .copyWith(decoration: TextDecoration.none);
+
+  final titleP = _centeredPainter(
+      title,
+      baseStyle.merge(TextStyle(
+          color: theme.dark,
+          fontSize: 17,
+          height: 1.5,
+          fontWeight: FontWeight.bold)),
+      _avail - 20);
+
+  // نصغّر الخط تدريجيًا حتى يتّسع كل المحتوى في الصورة
+  var size = items.length == 1 ? 26.0 : (items.length == 2 ? 23.0 : 21.0);
+  const between = 14.0 + 16 + 14; // فاصل زخرفي بين الصيغ
+  const maxH = _pageH - 2 * 74.0;
+  var paras = <_SalawatPara>[];
+  var contentH = 0.0;
+  for (var attempt = 0; attempt < 14; attempt++) {
+    final style = withPoemFont(baseStyle.merge(TextStyle(
+      fontSize: size,
+      height: 1.0,
+      color: textColor,
+      fontWeight: poemFontWeight,
+    )));
+    paras = [
+      for (final b in items) _makeSalawatPara(b, style, _avail, size, theme)
+    ];
+    final bodyH = paras.fold<double>(0, (a, p) => a + p.height) +
+        (paras.length - 1) * between;
+    contentH = 24 + 12 + titleP.height + 12 + 16 + 28 + bodyH + 24 + 16;
+    if (contentH <= maxH || size <= 12) break;
+    size = math.max(12, size * .92);
+  }
+
+  var y = math.max(70.0, (_pageH - contentH) / 2);
+
+  final rec = ui.PictureRecorder();
+  final canvas = Canvas(rec);
+  canvas.scale(_scale);
+  _paintPage(canvas, theme, paper, frame, pattern);
+
+  canvas.drawPath(
+      _pdfStar(Offset(_pageW / 2, y + 12), 12), Paint()..color = theme.accent);
+  y += 24 + 12;
+  titleP.paint(canvas, Offset(_mx + 10, y));
+  y += titleP.height + 12;
+  _divider(canvas, _pageW / 2, y + 8, _avail * .8, theme.accent);
+  y += 16 + 28;
+  for (var i = 0; i < paras.length; i++) {
+    if (i > 0) {
+      y += 14;
+      _divider(canvas, _pageW / 2, y + 8, _avail * .35, theme.accent);
+      y += 16 + 14;
+    }
+    y = _paintSalawatPara(canvas, paras[i], y);
+  }
+  y += 24;
+  _divider(canvas, _pageW / 2, y + 8, _avail * .5, theme.accent);
+
+  final pic = rec.endRecording();
+  final img = await pic.toImage(
+      (_pageW * _scale).round(), (_pageH * _scale).round());
+  final bd = await img.toByteData(format: ui.ImageByteFormat.png);
+  img.dispose();
+  pic.dispose();
+  return bd!.buffer.asUint8List();
+}
+
+Future<void> _copySalawatText(
+    BuildContext context, String title, List<SBlock> items) async {
+  final b = StringBuffer();
+  for (final x in items) {
+    final t = displayText(x.text);
+    b
+      ..writeln(x.number != null ? '(${arDigits(x.number!)}) $t' : t)
+      ..writeln();
+  }
+  b.write('— $title');
+  await Clipboard.setData(ClipboardData(text: b.toString()));
+  if (!context.mounted) return;
+  ScaffoldMessenger.of(context)
+    ..hideCurrentSnackBar()
+    ..showSnackBar(SnackBar(
+      content: Text(items.length == 1 ? 'تم نسخ الصيغة' : 'تم نسخ الصيغ',
+          textAlign: TextAlign.center),
+      duration: const Duration(seconds: 2),
+    ));
+}
+
+/// نافذة تصميم صورة الصيغ (معاينة حيّة) ثم الحفظ.
+/// ترجع true لو تم الحفظ أو النسخ.
+Future<bool> showSalawatImageSheet(
+    BuildContext context, String bookTitle, List<SBlock> items) async {
+  final messenger = ScaffoldMessenger.of(context);
+  var themeI = 0;
+  var paperI = 0;
+  var frameI = 0;
+  var patI = 0;
+  var textI = colorChoices.indexWhere((c) => c.color == poemFontColor.value);
+  if (textI < 0) textI = 0;
+  Future<Uint8List>? fut;
+  var done = false;
+
+  Widget swatch(Color fill, Color? border, bool selected, VoidCallback onTap) =>
+      GestureDetector(
+        onTap: onTap,
+        child: Container(
+          width: 40,
+          height: 40,
+          margin: const EdgeInsets.only(left: 8),
+          padding: const EdgeInsets.all(3),
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            border: Border.all(
+                color: selected ? brown : Colors.black26,
+                width: selected ? 3 : 1),
+          ),
+          child: Container(
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: fill,
+              border: border == null ? null : Border.all(color: border, width: 3),
+            ),
+          ),
+        ),
+      );
+
+  Widget title(String t) => Padding(
+        padding: const EdgeInsets.only(top: 12, bottom: 8),
+        child: Text(t,
+            style: TextStyle(
+                fontSize: 14.5, fontWeight: FontWeight.bold, color: brown)),
+      );
+
+  await showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: cream,
+    builder: (ctx) => StatefulBuilder(
+      builder: (ctx, setS) {
+        Future<Uint8List> make() => buildSalawatImage(
+              context: ctx,
+              title: bookTitle,
+              items: items,
+              theme: pdfThemes[themeI],
+              textColor: colorChoices[textI].color,
+              paper: paperChoices[paperI].color,
+              frame: frameI,
+              pattern: patI,
+            );
+        fut ??= make();
+        void change(VoidCallback f) => setS(() {
+              f();
+              fut = make();
+            });
+
+        Widget chips(List<String> labels, int sel, void Function(int) pick) =>
+            Wrap(spacing: 8, runSpacing: 6, children: [
+              for (var i = 0; i < labels.length; i++)
+                ChoiceChip(
+                  label: Text(labels[i],
+                      style: TextStyle(
+                          fontSize: 13,
+                          fontWeight:
+                              sel == i ? FontWeight.bold : FontWeight.normal,
+                          color: sel == i ? Colors.white : brownDark)),
+                  selected: sel == i,
+                  showCheckmark: false,
+                  selectedColor: brown,
+                  backgroundColor: Colors.white,
+                  onSelected: (_) => change(() => pick(i)),
+                ),
+            ]);
+
+        return SafeArea(
+          child: SizedBox(
+            height: MediaQuery.of(ctx).size.height * .92,
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 14, 20, 8),
+                  child: Align(
+                    alignment: AlignmentDirectional.centerStart,
+                    child: Text(
+                        items.length == 1
+                            ? 'حفظ الصيغة كصورة'
+                            : 'حفظ الصيغ كصورة',
+                        style: TextStyle(
+                            fontSize: 19,
+                            fontWeight: FontWeight.bold,
+                            color: brown)),
+                  ),
+                ),
+                SizedBox(
+                  height: 300,
+                  child: Center(
+                    child: AspectRatio(
+                      aspectRatio: _pageW / _pageH,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(boxShadow: [
+                          BoxShadow(
+                              color: Colors.black.withOpacity(.25),
+                              blurRadius: 8,
+                              offset: const Offset(0, 3)),
+                        ]),
+                        child: FutureBuilder<Uint8List>(
+                          future: fut,
+                          builder: (_, snap) => snap.hasData
+                              ? Image.memory(snap.data!,
+                                  fit: BoxFit.fill, gaplessPlayback: true)
+                              : const Center(
+                                  child: CircularProgressIndicator()),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        title('لون الإطار والزخرفة'),
+                        SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: Row(children: [
+                            for (var i = 0; i < pdfThemes.length; i++)
+                              swatch(pdfThemes[i].dark, pdfThemes[i].accent,
+                                  themeI == i, () => change(() => themeI = i)),
+                          ]),
+                        ),
+                        title('لون الورقة'),
+                        SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: Row(children: [
+                            for (var i = 0; i < paperChoices.length; i++)
+                              swatch(paperChoices[i].color, Colors.black12,
+                                  paperI == i, () => change(() => paperI = i)),
+                          ]),
+                        ),
+                        title('لون الخط'),
+                        SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: Row(children: [
+                            for (var i = 0; i < colorChoices.length; i++)
+                              swatch(colorChoices[i].color, null, textI == i,
+                                  () => change(() => textI = i)),
+                          ]),
+                        ),
+                        title('شكل الإطار'),
+                        chips(frameLabels, frameI, (i) => frameI = i),
+                        title('نقوش الخلفية'),
+                        chips(patternLabels, patI, (i) => patI = i),
+                      ],
+                    ),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 4, 20, 14),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        flex: 3,
+                        child: FilledButton.icon(
+                          style: FilledButton.styleFrom(
+                              backgroundColor: brown,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 14)),
+                          onPressed: () async {
+                            final bytes = await fut!;
+                            final inApp = await SavedFiles.save(
+                                SavedKind.image, bookTitle, bytes);
+                            if (inApp != null) done = true;
+                            if (ctx.mounted) Navigator.pop(ctx);
+                            messenger
+                              ..hideCurrentSnackBar()
+                              ..showSnackBar(SnackBar(
+                                  content: Text(
+                                      inApp != null
+                                          ? 'تم حفظ الصورة في قسم «الملفات»'
+                                          : 'تعذّر حفظ الصورة',
+                                      textAlign: TextAlign.center),
+                                  duration: const Duration(seconds: 3)));
+                          },
+                          icon: const Icon(Icons.download_rounded),
+                          label: const Text('حفظ الصورة',
+                              style: TextStyle(
+                                  fontSize: 16, fontWeight: FontWeight.bold)),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        flex: 2,
+                        child: OutlinedButton.icon(
+                          style: OutlinedButton.styleFrom(
+                              foregroundColor: brown,
+                              side: BorderSide(color: brown),
+                              padding: const EdgeInsets.symmetric(vertical: 14)),
+                          onPressed: () async {
+                            Navigator.pop(ctx);
+                            done = true;
+                            await _copySalawatText(context, bookTitle, items);
+                          },
+                          icon: const Icon(Icons.copy_rounded),
+                          label: const Text('نسخ النص'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    ),
+  );
+  return done;
 }
