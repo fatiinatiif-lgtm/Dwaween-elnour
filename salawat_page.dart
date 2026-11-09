@@ -271,135 +271,23 @@ class _SalawatTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final dc = diwanColors(index + 1);
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
-      child: Container(
-        decoration: BoxDecoration(
-          color: cream,
-          borderRadius: BorderRadius.circular(26),
-          border: Border.all(color: accentGold.withOpacity(.6), width: 1.2),
-          boxShadow: [
-            BoxShadow(
-                color: Colors.black.withOpacity(.16),
-                blurRadius: 12,
-                offset: const Offset(0, 4)),
-          ],
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(25),
-          child: Material(
-            color: Colors.transparent,
-            child: InkWell(
-              onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                      builder: (_) => SalawatReadPage(book: book))),
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(minHeight: 120),
-                child: IntrinsicHeight(
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      // الكعب الملوّن وعليه الأيقونة
-                      Container(
-                        width: 84,
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.topCenter,
-                            end: Alignment.bottomCenter,
-                            colors: [dc.$1, dc.$2],
-                          ),
-                        ),
-                        child: Center(
-                          child: Container(
-                            width: 52,
-                            height: 52,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: Colors.black.withOpacity(.18),
-                              border: Border.all(color: accentGold, width: 1.4),
-                            ),
-                            child:
-                                Icon(book.icon, color: accentGold, size: 27),
-                          ),
-                        ),
-                      ),
-                      Container(
-                        width: 4,
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.topCenter,
-                            end: Alignment.bottomCenter,
-                            colors: [
-                              Color.lerp(accentGold, Colors.white, .4)!,
-                              accentGold,
-                              Color.lerp(accentGold, Colors.black, .3)!,
-                            ],
-                          ),
-                        ),
-                      ),
-                      Expanded(
-                        child: Padding(
-                          padding: const EdgeInsets.fromLTRB(14, 16, 14, 14),
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(titleTwoLines(book.title),
-                                  style: TextStyle(
-                                      color: ink,
-                                      fontSize: 17.5,
-                                      height: 1.55,
-                                      fontWeight: FontWeight.bold)),
-                              const SizedBox(height: 10),
-                              const OrnamentDivider(),
-                              const SizedBox(height: 12),
-                              Row(
-                                children: [
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 11, vertical: 5),
-                                    decoration: BoxDecoration(
-                                      color: accentGold.withOpacity(.16),
-                                      borderRadius: BorderRadius.circular(20),
-                                      border: Border.all(
-                                          color: accentGold.withOpacity(.6)),
-                                    ),
-                                    child: Text(book.blurb,
-                                        style: TextStyle(
-                                            color: ink,
-                                            fontSize: 12.5,
-                                            fontWeight: FontWeight.w600)),
-                                  ),
-                                  const Spacer(),
-                                  Container(
-                                    width: 36,
-                                    height: 36,
-                                    decoration: BoxDecoration(
-                                      shape: BoxShape.circle,
-                                      gradient: LinearGradient(
-                                          begin: Alignment.topRight,
-                                          end: Alignment.bottomLeft,
-                                          colors: [dc.$1, dc.$2]),
-                                      border: Border.all(
-                                          color: accentGold, width: 1.3),
-                                    ),
-                                    child: Icon(Icons.chevron_left_rounded,
-                                        color: accentGold, size: 24),
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
+    return ManuscriptCard(
+      colors: dc,
+      seal: CardSeal(icon: book.icon, colors: dc),
+      padding: const EdgeInsets.fromLTRB(18, 34, 18, 24),
+      onTap: () => Navigator.push(context,
+          MaterialPageRoute(builder: (_) => SalawatReadPage(book: book))),
+      child: Column(
+        children: [
+          CardTitle(book.title),
+          const SizedBox(height: 12),
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 34),
+            child: OrnamentDivider(),
           ),
-        ),
+          const SizedBox(height: 14),
+          CardPill(icon: Icons.auto_awesome_rounded, text: book.blurb),
+        ],
       ),
     );
   }

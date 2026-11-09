@@ -512,9 +512,9 @@ class _MainShellState extends State<MainShell> {
       );
 }
 
-// ───────────── الشريط السفلي: "محراب النور" ─────────────
-// الشريط يطلع منه قوس محراب مدبّب تحت التبويب المختار، وفوقه قلب ذهبي مضيء
-// تنزلق وتدور من تبويب لآخر، وبقية التبويبات أيقونة + عنوان على الشريط.
+// ───────────── الشريط السفلي: «لوح الذهب» ─────────────
+// شريط عائم بإطار ذهبي مزدوج ونقش خفيف، والتبويب المختار داخل كبسولة ذهبية
+// مضيئة تنزلق من تبويب لآخر.
 class _FancyBottomBar extends StatelessWidget {
   final int selected;
   final ValueChanged<int> onTap;
@@ -528,44 +528,94 @@ class _FancyBottomBar extends StatelessWidget {
     (Icons.settings_rounded, 'الإعدادات'),
   ];
 
-  static const double _h = 96; // الارتفاع الكلي
-  static const double _y0 = 30; // أعلى حافة للشريط (فوقها مكان القوس والنجمة)
-  static const double _badge = 54; // قطر القلب
+  static const double _h = 70;
 
   @override
   Widget build(BuildContext context) {
     final rtl = Directionality.of(context) == TextDirection.rtl;
+    final gold = accentGold;
     return Container(
       color: beige,
       child: SafeArea(
         top: false,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(12, 2, 12, 8),
+          padding: const EdgeInsets.fromLTRB(14, 6, 14, 10),
           child: SizedBox(
             height: _h,
             child: LayoutBuilder(builder: (ctx, c) {
               final w = c.maxWidth;
               final iw = w / _items.length;
-              // مركز التبويب (يدعم اتجاه RTL: أول تبويب على اليمين)
+              // مركز التبويب (يدعم RTL: أول تبويب على اليمين)
               double cxOf(double t) => rtl ? w - (t + .5) * iw : (t + .5) * iw;
               return TweenAnimationBuilder<double>(
                 tween: Tween<double>(end: selected.toDouble()),
-                duration: const Duration(milliseconds: 480),
+                duration: const Duration(milliseconds: 420),
                 curve: Curves.easeOutCubic,
                 builder: (_, t, __) {
                   final cx = cxOf(t);
-                  final nearest = t.round().clamp(0, _items.length - 1);
                   return Stack(
                     clipBehavior: Clip.none,
                     children: [
+                      // جسم الشريط
                       Positioned.fill(
-                        child: CustomPaint(
-                          painter: _BarPainter(
-                              cx: cx,
-                              y0: _y0,
-                              top: brown,
-                              bottom: brownDark,
-                              gold: accentGold),
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(32),
+                            gradient: LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                              colors: [brown, brownDark],
+                            ),
+                            border: Border.all(
+                                color: gold.withOpacity(.95), width: 1.5),
+                            boxShadow: [
+                              BoxShadow(
+                                  color: Colors.black.withOpacity(.4),
+                                  blurRadius: 20,
+                                  offset: const Offset(0, 8)),
+                            ],
+                          ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(30.5),
+                            child: Stack(
+                              children: [
+                                Positioned.fill(
+                                    child: RepaintBoundary(
+                                        child: CustomPaint(
+                                            painter: _PatternPainter(k: .9)))),
+                                Positioned.fill(
+                                    child: CustomPaint(
+                                        painter: _BarFramePainter(gold))),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      // الكبسولة الذهبية المضيئة
+                      Positioned(
+                        left: cx - (iw - 10) / 2,
+                        top: 7,
+                        bottom: 7,
+                        width: iw - 10,
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(24),
+                            gradient: LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                              colors: [
+                                Color.lerp(gold, Colors.white, .4)!,
+                                gold,
+                                Color.lerp(gold, Colors.black, .18)!,
+                              ],
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                  color: gold.withOpacity(.5),
+                                  blurRadius: 16,
+                                  spreadRadius: 1),
+                            ],
+                          ),
                         ),
                       ),
                       // التبويبات
@@ -577,39 +627,6 @@ class _FancyBottomBar extends StatelessWidget {
                           bottom: 0,
                           child: _item(i, (1 - (t - i).abs()).clamp(0.0, 1.0)),
                         ),
-                      // القلب المضيء
-                      Positioned(
-                        left: cx - _badge / 2,
-                        top: _y0 - _badge / 2,
-                        width: _badge,
-                        height: _badge,
-                        child: IgnorePointer(
-                          child: Stack(
-                            alignment: Alignment.center,
-                            children: [
-                              Container(
-                                width: _badge * .7,
-                                height: _badge * .7,
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  boxShadow: [
-                                    BoxShadow(
-                                        color: accentGold.withOpacity(.55),
-                                        blurRadius: 18,
-                                        spreadRadius: 1),
-                                  ],
-                                ),
-                              ),
-                              CustomPaint(
-                                  size: const Size(_badge, _badge),
-                                  painter:
-                                      _BadgePainter(accentGold, brownDark)),
-                              Icon(_items[nearest].$1,
-                                  size: 23, color: accentGold),
-                            ],
-                          ),
-                        ),
-                      ),
                     ],
                   );
                 },
@@ -621,120 +638,64 @@ class _FancyBottomBar extends StatelessWidget {
     );
   }
 
-  Widget _item(int i, double w) => GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: () => onTap(i),
-        child: Stack(
+  Widget _item(int i, double w) {
+    final fg = Color.lerp(Colors.white.withOpacity(.8), brownDark, w)!;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => onTap(i),
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            // الأيقونة تختفي تدريجيًا لأن القلب يحلّ محلها
-            Positioned(
-              top: _y0 + 9,
-              left: 0,
-              right: 0,
-              child: Opacity(
-                opacity: (1 - w * 1.6).clamp(0.0, 1.0),
-                child: Icon(_items[i].$1,
-                    size: 27, color: Colors.white.withOpacity(.85)),
-              ),
-            ),
-            Positioned(
-              bottom: 10,
-              left: 0,
-              right: 0,
-              child: Text(
-                _items[i].$2,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 12 + w * 1.0,
-                  fontWeight: w > .5 ? FontWeight.bold : FontWeight.w500,
-                  color: Color.lerp(
-                      Colors.white.withOpacity(.82), accentGold, w),
-                ),
+            Icon(_items[i].$1, size: 23 + w * 3, color: fg),
+            const SizedBox(height: 2),
+            Text(
+              _items[i].$2,
+              textAlign: TextAlign.center,
+              maxLines: 1,
+              style: TextStyle(
+                fontSize: 10.5 + w * .9,
+                height: 1.2,
+                fontWeight: w > .5 ? FontWeight.w800 : FontWeight.w500,
+                color: fg,
               ),
             ),
           ],
         ),
-      );
+      ),
+    );
+  }
 }
 
-/// جسم الشريط: مستطيل مدوّر + قوس محراب مدبّب فوق التبويب المختار،
-/// بتدرّج ونقش هندسي وهالة ذهبية وإطار مذهّب
-class _BarPainter extends CustomPainter {
-  final double cx;
-  final double y0;
-  final Color top;
-  final Color bottom;
+/// خط ذهبي داخلي رفيع داخل الشريط + لمعة علوية
+class _BarFramePainter extends CustomPainter {
   final Color gold;
-  const _BarPainter({
-    required this.cx,
-    required this.y0,
-    required this.top,
-    required this.bottom,
-    required this.gold,
-  });
-
+  const _BarFramePainter(this.gold);
   @override
   void paint(Canvas canvas, Size size) {
-    final w = size.width, h = size.height;
-    const hw = 35.0; // نصف عرض قاعدة القوس
-    final body = Path()
-      ..addRRect(RRect.fromRectAndRadius(
-          Rect.fromLTRB(0, y0, w, h), const Radius.circular(24)));
-    // قوس المحراب المدبّب
-    final arch = Path()
-      ..moveTo(cx - hw, y0 + 12)
-      ..cubicTo(cx - hw, y0 - 16, cx - 11, y0 - 19, cx, 3)
-      ..cubicTo(cx + 11, y0 - 19, cx + hw, y0 - 16, cx + hw, y0 + 12)
-      ..close();
-    final shape = Path.combine(PathOperation.union, body, arch);
-
-    canvas.drawShadow(shape, Colors.black.withOpacity(.55), 9, true);
-    final rect = Offset.zero & size;
-    canvas.drawPath(
-        shape,
+    final r = RRect.fromRectAndRadius(
+        Rect.fromLTWH(4, 4, size.width - 8, size.height - 8),
+        const Radius.circular(28));
+    canvas.drawRRect(
+        r,
         Paint()
-          ..shader = LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [top, bottom],
-          ).createShader(rect));
-
-    canvas.save();
-    canvas.clipPath(shape);
-    // هالة ذهبية خلف القلب
-    canvas.drawCircle(
-        Offset(cx, y0),
-        62,
-        Paint()
-          ..shader = RadialGradient(colors: [
-            gold.withOpacity(.38),
-            gold.withOpacity(0),
-          ]).createShader(Rect.fromCircle(center: Offset(cx, y0), radius: 62)));
-    // نقش القلوب الهندسي
-    const _PatternPainter(k: 1.1).paint(canvas, size);
-    // خط ذهبي داخلي رفيع أسفل الشريط
-    canvas.drawLine(
-        Offset(22, h - 7),
-        Offset(w - 22, h - 7),
-        Paint()
-          ..color = gold.withOpacity(.35)
-          ..strokeWidth = .8);
-    canvas.restore();
-
-    canvas.drawPath(
-        shape,
-        Paint()
-          ..color = gold.withOpacity(.9)
+          ..color = gold.withOpacity(.4)
           ..style = PaintingStyle.stroke
-          ..strokeWidth = 1.5);
+          ..strokeWidth = .8);
+    canvas.drawLine(
+        Offset(34, 1.5),
+        Offset(size.width - 34, 1.5),
+        Paint()
+          ..shader = LinearGradient(colors: [
+            gold.withOpacity(0),
+            Color.lerp(gold, Colors.white, .5)!.withOpacity(.9),
+            gold.withOpacity(0),
+          ]).createShader(Rect.fromLTWH(0, 0, size.width, 3))
+          ..strokeWidth = 1.2);
   }
 
   @override
-  bool shouldRepaint(covariant _BarPainter old) =>
-      old.cx != cx ||
-      old.top != top ||
-      old.bottom != bottom ||
-      old.gold != gold;
+  bool shouldRepaint(covariant _BarFramePainter old) => old.gold != gold;
 }
 
 // ───────────── الشاشة الرئيسية ─────────────
@@ -795,32 +756,48 @@ class _HomePageState extends State<HomePage> {
           const _DarkModeBar(),
           const SizedBox(height: 8),
           Container(
+            padding: const EdgeInsets.all(2.5),
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(18),
-              boxShadow: _softShadow(.10),
+              borderRadius: BorderRadius.circular(26),
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Color.lerp(accentGold, Colors.white, .45)!,
+                  accentGold,
+                  Color.lerp(accentGold, Colors.black, .22)!,
+                ],
+              ),
+              boxShadow: _softShadow(.16),
             ),
-            child: TextField(
-              controller: controller,
-              onChanged: (_) => setState(() {}),
-              decoration: InputDecoration(
-                hintText: 'ابحث داخل النصوص كلها: كلمة أو عبارة',
-                hintStyle: TextStyle(color: inkSoft, fontSize: 14),
-                prefixIcon: Icon(Icons.search_rounded, color: brown),
-                suffixIcon: searching
-                    ? IconButton(
-                        icon: const Icon(Icons.close_rounded),
-                        onPressed: () => setState(controller.clear))
-                    : null,
-                filled: true,
-                fillColor: cream,
-                contentPadding: const EdgeInsets.symmetric(vertical: 16),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(18),
-                  borderSide: BorderSide(color: accentGold.withOpacity(.6)),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(18),
-                  borderSide: BorderSide(color: brown, width: 1.6),
+            child: Container(
+              decoration: BoxDecoration(
+                color: cream,
+                borderRadius: BorderRadius.circular(23.5),
+              ),
+              child: TextField(
+                controller: controller,
+                onChanged: (_) => setState(() {}),
+                style: TextStyle(color: ink, fontSize: 15.5),
+                decoration: InputDecoration(
+                  hintText: 'ابحث داخل النصوص كلها: كلمة أو عبارة',
+                  hintStyle: TextStyle(color: inkSoft, fontSize: 14),
+                  prefixIcon: Padding(
+                    padding: const EdgeInsets.all(13),
+                    child: CustomPaint(
+                        size: const Size(20, 20),
+                        painter: _StarPainter(accentGold)),
+                  ),
+                  suffixIcon: searching
+                      ? IconButton(
+                          icon: Icon(Icons.close_rounded, color: brown),
+                          onPressed: () => setState(controller.clear))
+                      : Icon(Icons.search_rounded, color: brown),
+                  border: InputBorder.none,
+                  enabledBorder: InputBorder.none,
+                  focusedBorder: InputBorder.none,
+                  filled: false,
+                  contentPadding: const EdgeInsets.symmetric(vertical: 16),
                 ),
               ),
             ),
@@ -875,73 +852,19 @@ class _LastReadCard extends StatelessWidget {
           final i = list.indexWhere((p) => p.title == parts[1]);
           if (i < 0) return const SizedBox.shrink();
           final poem = list[i];
-          return Padding(
-            padding: const EdgeInsets.only(bottom: 16),
-            child: Material(
-              color: cream,
-              elevation: 1.5,
-              shadowColor: Colors.black38,
-              clipBehavior: Clip.antiAlias,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(18),
-                side: BorderSide(color: accentGold.withOpacity(.55)),
-              ),
-              child: InkWell(
-                onTap: () {
-                  markLastRead(parts[0], poem);
-                  Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                          builder: (_) =>
-                              PoemPage(poem: poem, diwan: parts[0])));
-                },
-                child: Padding(
-                  padding: const EdgeInsets.all(14),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 46,
-                        height: 46,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: brown,
-                          border: Border.all(color: accentGold, width: 1.4),
-                        ),
-                        child: Icon(Icons.bookmark_rounded,
-                            color: accentGold, size: 24),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('أكمل القراءة',
-                                style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.bold,
-                                    color: brown)),
-                            const SizedBox(height: 2),
-                            Text(poem.title,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                    fontSize: 15.5,
-                                    fontWeight: FontWeight.bold,
-                                    color: ink)),
-                            Text(parts[0],
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(fontSize: 12, color: inkSoft)),
-                          ],
-                        ),
-                      ),
-                      Icon(Icons.chevron_left_rounded,
-                          color: accentGold, size: 28),
-                    ],
-                  ),
-                ),
-              ),
-            ),
+          return ManuscriptRow(
+            icon: Icons.bookmark_rounded,
+            eyebrow: 'أكمل القراءة',
+            title: poem.title,
+            subtitle: parts[0],
+            colors: diwanColorsByName(parts[0]),
+            onTap: () {
+              markLastRead(parts[0], poem);
+              Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (_) => PoemPage(poem: poem, diwan: parts[0])));
+            },
           );
         },
       );
@@ -952,8 +875,8 @@ class _VerseOfDayCard extends StatelessWidget {
   const _VerseOfDayCard();
 
   Widget _action(IconData icon, String label, VoidCallback onTap) => Material(
-        color: Colors.black.withOpacity(.2),
-        shape: StadiumBorder(side: BorderSide(color: accentGold.withOpacity(.6))),
+        color: accentGold.withOpacity(.16),
+        shape: StadiumBorder(side: BorderSide(color: accentGold.withOpacity(.75))),
         child: InkWell(
           customBorder: const StadiumBorder(),
           onTap: onTap,
@@ -965,10 +888,10 @@ class _VerseOfDayCard extends StatelessWidget {
                 Icon(icon, size: 17, color: accentGold),
                 const SizedBox(width: 6),
                 Text(label,
-                    style: const TextStyle(
-                        color: Colors.white,
+                    style: TextStyle(
+                        color: ink,
                         fontSize: 12.5,
-                        fontWeight: FontWeight.w600)),
+                        fontWeight: FontWeight.w700)),
               ],
             ),
           ),
@@ -997,105 +920,67 @@ class _VerseOfDayCard extends StatelessWidget {
         : (at >= 0 && at + 1 < vs.length ? vs[at + 1] : vs[vs.length - 2]);
     final Verse firstV = (nextV != null && at + 1 >= vs.length) ? nextV : pick.verse;
     final Verse? secondV = (nextV != null && at + 1 >= vs.length) ? pick.verse : nextV;
-    final style = withPoemFont(const TextStyle(
-            color: Colors.white, fontSize: 20, height: 1.7))
+    final style = withPoemFont(TextStyle(
+            color: ink, fontSize: 20, height: 1.7))
         .copyWith(fontWeight: poemFontWeight);
-    return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(24),
-        gradient: LinearGradient(
-            begin: Alignment.topRight,
-            end: Alignment.bottomLeft,
-            colors: [brown, brownDark]),
-        boxShadow: _softShadow(.25),
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(24),
-        child: Stack(
-          children: [
-            Positioned.fill(
-                child: RepaintBoundary(
-                    child: CustomPaint(painter: _PatternPainter(k: .9)))),
-            Positioned.fill(
-              child: Padding(
-                padding: const EdgeInsets.all(5),
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(19),
-                    border: Border.all(
-                        color: accentGold.withOpacity(.6), width: 1),
-                  ),
-                ),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 20, 20, 18),
-              child: Column(
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      CustomPaint(
-                          size: const Size(16, 16),
-                          painter: _StarPainter(accentGold)),
-                      const SizedBox(width: 8),
-                      Text('بيت اليوم',
-                          style: TextStyle(
-                              color: accentGold,
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold)),
-                      const SizedBox(width: 8),
-                      CustomPaint(
-                          size: const Size(16, 16),
-                          painter: _StarPainter(accentGold)),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 24),
-                    child: OrnamentDivider(),
-                  ),
-                  const SizedBox(height: 12),
-                  Text(displayText(pick.verse.sadr).trim(),
-                      textAlign: TextAlign.center, style: style),
-                  Text(displayText(pick.verse.ajz).trim(),
-                      textAlign: TextAlign.center, style: style),
-                  const SizedBox(height: 8),
-                  Text('— ${pick.poem.title}',
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                          color: Color(0xFFE8D9BC), fontSize: 13)),
-                  const SizedBox(height: 14),
-                  Wrap(
-                    alignment: WrapAlignment.center,
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      _action(Icons.image_rounded, 'حفظ كصورة', () {
-                        showVerseImageSheet(
-                            context, pick.diwan, pick.poem, firstV,
-                            nextVerse: secondV);
-                      }),
-                      _action(Icons.copy_rounded, 'نسخ', () async {
-                        await copyVerseText(
-                            context, pick.poem, pick.verse);
-                      }),
-                      _action(Icons.menu_book_rounded, 'القصيدة', () {
-                        markLastRead(pick.diwan, pick.poem);
-                        Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                                builder: (_) => PoemPage(
-                                    poem: pick.poem, diwan: pick.diwan)));
-                      }),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
+    final dc = diwanColorsByName(pick.diwan);
+    return ManuscriptCard(
+      colors: dc,
+      seal: CardSeal(icon: Icons.auto_awesome_rounded, colors: dc),
+      padding: const EdgeInsets.fromLTRB(20, 36, 20, 26),
+      onTap: () {
+        markLastRead(pick.diwan, pick.poem);
+        Navigator.push(
+            context,
+            MaterialPageRoute(
+                builder: (_) =>
+                    PoemPage(poem: pick.poem, diwan: pick.diwan)));
+      },
+      child: Column(
+        children: [
+          Text('بيت اليوم',
+              style: TextStyle(
+                  color: currentPalette.dark ? accentGold : brown,
+                  fontSize: 19,
+                  fontWeight: FontWeight.w800)),
+          const SizedBox(height: 8),
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 28),
+            child: OrnamentDivider(),
+          ),
+          const SizedBox(height: 14),
+          Text(displayText(pick.verse.sadr).trim(),
+              textAlign: TextAlign.center, style: style),
+          Text(displayText(pick.verse.ajz).trim(),
+              textAlign: TextAlign.center, style: style),
+          const SizedBox(height: 10),
+          Text('— ${pick.poem.title}',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: inkSoft, fontSize: 13)),
+          const SizedBox(height: 16),
+          Wrap(
+            alignment: WrapAlignment.center,
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _action(Icons.image_rounded, 'حفظ كصورة', () {
+                showVerseImageSheet(context, pick.diwan, pick.poem, firstV,
+                    nextVerse: secondV);
+              }),
+              _action(Icons.copy_rounded, 'نسخ', () async {
+                await copyVerseText(context, pick.poem, pick.verse);
+              }),
+              _action(Icons.menu_book_rounded, 'القصيدة', () {
+                markLastRead(pick.diwan, pick.poem);
+                Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) =>
+                            PoemPage(poem: pick.poem, diwan: pick.diwan)));
+              }),
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -1115,15 +1000,15 @@ class _DarkModeBar extends StatelessWidget {
             Expanded(
               child: Text('دواوين النور',
                   style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: brown)),
+                      fontSize: 22,
+                      fontWeight: FontWeight.w800,
+                      color: currentPalette.dark ? ink : brown)),
             ),
             // زرار "الملفات": يفتح صفحة الـ PDF والصور المحفوظة
             Material(
-              color: cream,
+              color: accentGold.withOpacity(.16),
               shape: StadiumBorder(
-                  side: BorderSide(color: accentGold.withOpacity(.7))),
+                  side: BorderSide(color: accentGold, width: 1.3)),
               child: InkWell(
                 customBorder: const StadiumBorder(),
                 onTap: () => Navigator.of(context).push(
@@ -1152,9 +1037,9 @@ class _DarkModeBar extends StatelessWidget {
             Tooltip(
               message: dark ? 'الوضع الفاتح' : 'الوضع الداكن',
               child: Material(
-                color: cream,
+                color: accentGold.withOpacity(.16),
                 shape: CircleBorder(
-                    side: BorderSide(color: accentGold.withOpacity(.7))),
+                    side: BorderSide(color: accentGold, width: 1.3)),
                 child: InkWell(
                   customBorder: const CircleBorder(),
                   onTap: () => appDarkMode.value = !dark,
@@ -1184,11 +1069,13 @@ class _DarkModeBar extends StatelessWidget {
 /// «مسك الكلام» ↵ «في مدح خير الأنام». (الاسم القصير بلا حرف جر يبقى سطرًا واحدًا)
 (String, String?) titleParts(String name) {
   final t = name.trim().replaceAll(RegExp(r'\s+'), ' ');
-  for (final m in const [' في ', ' على ', ' لسيد ', ' لخير ']) {
+  var best = -1; // أول موضع لحرف الربط في الاسم
+  for (final m in const [' في ', ' على ', ' لسيد ', ' لخير ', ' بمدح ']) {
     final i = t.indexOf(m);
-    if (i > 0) return (t.substring(0, i), t.substring(i + 1));
+    if (i > 0 && (best < 0 || i < best)) best = i;
   }
-  return (t, null);
+  if (best < 0) return (t, null);
+  return (t.substring(0, best), t.substring(best + 1));
 }
 
 /// اسم الديوان/القسم كعنوان: سطران (الأول والثاني على السجع)
@@ -1285,8 +1172,12 @@ class _DomeFrame extends StatelessWidget {
               color: beige, borderRadius: BorderRadius.circular(21)),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(18),
+            // alignment.y: كلما زاد (حتى 1) طلعت القبة لفوق أكتر، وكلما قلّ نزلت (-1 = أعلى الصورة)
             child: Image.asset('assets/images/green_dome.jpg',
-                width: 120, height: 138, fit: BoxFit.cover),
+                width: 120,
+                height: 150,
+                fit: BoxFit.cover,
+                alignment: const Alignment(0, .6)),
           ),
         ),
       );
@@ -1434,159 +1325,345 @@ class DiwanTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final count = (poems[name] ?? []).length;
     final dc = diwanColors(number);
+    return ManuscriptCard(
+      colors: dc,
+      seal: CardSeal(number: number, colors: dc),
+      padding: const EdgeInsets.fromLTRB(18, 34, 18, 24),
+      onTap: () => Navigator.push(context,
+          MaterialPageRoute(builder: (_) => DiwanDetailPage(name: name))),
+      child: Column(
+        children: [
+          CardTitle(name),
+          const SizedBox(height: 12),
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 34),
+            child: OrnamentDivider(),
+          ),
+          const SizedBox(height: 14),
+          CardPill(
+              icon: Icons.auto_stories_rounded,
+              text: diwanCountLabel(name, count)),
+        ],
+      ),
+    );
+  }
+}
+
+// ════════════════════════════════════════════════
+// تصميم «المخطوطة المزخرفة»: بطاقة ورقية بإطار ذهبي مزدوج وقلوب في الزوايا،
+// وختم (رقم أو أيقونة) يجلس على حافتها العلوية، وشريط بلون الديوان في أسفلها.
+// تُستخدم في بطاقات الدواوين والصلوات والقصائد.
+// ════════════════════════════════════════════════
+
+class ManuscriptCard extends StatelessWidget {
+  final VoidCallback onTap;
+  final (Color, Color) colors;
+  final Widget child;
+  final Widget? seal; // ختم يجلس على الحافة العلوية في المنتصف
+  final double radius;
+  final double gap; // المسافة تحت البطاقة
+  final EdgeInsetsGeometry padding;
+  const ManuscriptCard({
+    super.key,
+    required this.onTap,
+    required this.colors,
+    required this.child,
+    this.seal,
+    this.radius = 24,
+    this.gap = 20,
+    this.padding = const EdgeInsets.fromLTRB(18, 16, 18, 20),
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final dark = currentPalette.dark;
+    final top = Color.lerp(cream, Colors.white, dark ? .05 : .55)!;
+    final bottom = Color.lerp(cream, accentGold, dark ? .12 : .18)!;
+    final lift = seal == null ? 0.0 : 28.0;
     return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
-      child: Container(
-        decoration: BoxDecoration(
-          color: cream,
-          borderRadius: BorderRadius.circular(26),
-          border: Border.all(color: accentGold.withOpacity(.6), width: 1.2),
-          boxShadow: _softShadow(.16),
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(25),
-          child: Material(
-            color: Colors.transparent,
-            child: InkWell(
-              onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                      builder: (_) => DiwanDetailPage(name: name))),
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(minHeight: 128),
-                child: IntrinsicHeight(
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      // ── كعب الكتاب ──
-                      SizedBox(
-                        width: 88,
-                        child: Stack(
-                          alignment: Alignment.center,
-                          children: [
-                            Positioned.fill(
-                              child: DecoratedBox(
-                                decoration: BoxDecoration(
-                                  gradient: LinearGradient(
-                                    begin: Alignment.topCenter,
-                                    end: Alignment.bottomCenter,
-                                    colors: [dc.$1, dc.$2],
-                                  ),
-                                ),
-                              ),
-                            ),
-                            Positioned.fill(
-                                child: RepaintBoundary(
-                                    child: CustomPaint(
-                                        painter: _PatternPainter(k: 1.2)))),
-                            _ArchBadge(number: number, core: dc.$2),
-                          ],
-                        ),
-                      ),
-                      // شريط ذهبي رفيع يفصل الكعب عن الجسم
-                      Container(
-                        width: 4,
+      padding: EdgeInsets.only(bottom: gap),
+      child: Stack(
+        clipBehavior: Clip.none,
+        alignment: Alignment.topCenter,
+        children: [
+          Container(
+            margin: EdgeInsets.only(top: lift),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(radius),
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [top, bottom],
+              ),
+              border: Border.all(color: accentGold, width: 1.5),
+              boxShadow: [
+                BoxShadow(
+                    color: Colors.black.withOpacity(.16),
+                    blurRadius: 18,
+                    offset: const Offset(0, 7)),
+                BoxShadow(
+                    color: accentGold.withOpacity(.18),
+                    blurRadius: 3,
+                    spreadRadius: 1),
+              ],
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(radius - 1.5),
+              child: Stack(
+                children: [
+                  Positioned.fill(
+                      child: IgnorePointer(
+                          child: CustomPaint(
+                              painter: _CardFramePainter(accentGold, radius)))),
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    height: 6,
+                    child: IgnorePointer(
+                      child: DecoratedBox(
                         decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.topCenter,
-                            end: Alignment.bottomCenter,
-                            colors: [
-                              Color.lerp(accentGold, Colors.white, .4)!,
-                              accentGold,
-                              Color.lerp(accentGold, Colors.black, .3)!,
-                            ],
-                          ),
+                          gradient:
+                              LinearGradient(colors: [colors.$1, colors.$2]),
                         ),
                       ),
-                      // ── الجسم ──
-                      Expanded(
-                        child: Stack(
-                          children: [
-                            PositionedDirectional(
-                              end: -26,
-                              bottom: -30,
-                              child: CustomPaint(
-                                  size: const Size(120, 120),
-                                  painter:
-                                      _StarPainter(accentGold.withOpacity(.10))),
-                            ),
-                            Padding(
-                              padding:
-                                  const EdgeInsets.fromLTRB(14, 16, 14, 14),
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(titleTwoLines(name),
-                                      style: TextStyle(
-                                          color: ink,
-                                          fontSize: 17.5,
-                                          height: 1.55,
-                                          fontWeight: FontWeight.bold)),
-                                  const SizedBox(height: 10),
-                                  const OrnamentDivider(),
-                                  const SizedBox(height: 12),
-                                  Row(
-                                    children: [
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(
-                                            horizontal: 11, vertical: 5),
-                                        decoration: BoxDecoration(
-                                          color: accentGold.withOpacity(.16),
-                                          borderRadius:
-                                              BorderRadius.circular(20),
-                                          border: Border.all(
-                                              color:
-                                                  accentGold.withOpacity(.6)),
-                                        ),
-                                        child: Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            Icon(Icons.auto_stories_rounded,
-                                                size: 15, color: accentGold),
-                                            const SizedBox(width: 6),
-                                            Text(diwanCountLabel(name, count),
-                                                style: TextStyle(
-                                                    color: ink,
-                                                    fontSize: 12.5,
-                                                    fontWeight:
-                                                        FontWeight.w600)),
-                                          ],
-                                        ),
-                                      ),
-                                      const Spacer(),
-                                      Container(
-                                        width: 36,
-                                        height: 36,
-                                        decoration: BoxDecoration(
-                                          shape: BoxShape.circle,
-                                          gradient: LinearGradient(
-                                              begin: Alignment.topRight,
-                                              end: Alignment.bottomLeft,
-                                              colors: [dc.$1, dc.$2]),
-                                          border: Border.all(
-                                              color: accentGold, width: 1.3),
-                                        ),
-                                        child: Icon(
-                                            Icons.chevron_left_rounded,
-                                            color: accentGold,
-                                            size: 24),
-                                      ),
-                                    ],
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
+                    ),
                   ),
-                ),
+                  Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      onTap: onTap,
+                      child: Padding(
+                        padding: padding,
+                        child: SizedBox(width: double.infinity, child: child),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
+          if (seal != null) seal!,
+        ],
+      ),
+    );
+  }
+}
+
+/// إطار داخلي رفيع + قلوب ذهبية في الزوايا + قلب كبير شفّاف في الخلفية
+class _CardFramePainter extends CustomPainter {
+  final Color gold;
+  final double radius;
+  const _CardFramePainter(this.gold, this.radius);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    const inset = 6.0;
+    final rad = math.max(4.0, radius - 7);
+    final r = RRect.fromRectAndRadius(
+        Rect.fromLTWH(inset, inset, size.width - 2 * inset,
+            size.height - 2 * inset),
+        Radius.circular(rad));
+    canvas.drawRRect(
+        r,
+        Paint()
+          ..color = gold.withOpacity(.55)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = .9);
+    // قلب كبير خافت في الخلفية
+    canvas.drawPath(
+        _star8(Offset(size.width - 42, size.height - 34), 44),
+        Paint()..color = gold.withOpacity(.07));
+    // قلوب صغيرة على الزوايا
+    final k = rad * (1 - .7071);
+    final pts = [
+      Offset(inset + k, inset + k),
+      Offset(size.width - inset - k, inset + k),
+      Offset(inset + k, size.height - inset - k),
+      Offset(size.width - inset - k, size.height - inset - k),
+    ];
+    for (final p in pts) {
+      canvas.drawPath(_star8(p, 4.6), Paint()..color = gold);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _CardFramePainter old) =>
+      old.gold != gold || old.radius != radius;
+}
+
+/// الختم: قلب ذهبي مضيء فيه رقم أو أيقونة
+class CardSeal extends StatelessWidget {
+  final int? number;
+  final IconData? icon;
+  final (Color, Color) colors;
+  const CardSeal({super.key, this.number, this.icon, required this.colors});
+  @override
+  Widget build(BuildContext context) => SizedBox(
+        width: 56,
+        height: 56,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            Container(
+              width: 34,
+              height: 34,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                      color: accentGold.withOpacity(.55), blurRadius: 16),
+                ],
+              ),
+            ),
+            _NumberStar(
+                number: number,
+                icon: icon,
+                size: 56,
+                ring: accentGold,
+                core: colors.$1,
+                textColor: Colors.white),
+          ],
         ),
+      );
+}
+
+/// عنوان البطاقة: الاسم على سطرين مسجوعين (الأول كبير والثاني أصغر)
+class CardTitle extends StatelessWidget {
+  final String name;
+  const CardTitle(this.name, {super.key});
+  @override
+  Widget build(BuildContext context) {
+    final p = titleParts(name);
+    final soft = currentPalette.dark ? inkSoft : brown;
+    return Text.rich(
+      TextSpan(children: [
+        TextSpan(
+            text: p.$1,
+            style: TextStyle(
+                color: ink,
+                fontSize: 21,
+                height: 1.55,
+                fontWeight: FontWeight.w800)),
+        if (p.$2 != null)
+          TextSpan(
+              text: '\n${p.$2}',
+              style: TextStyle(
+                  color: soft,
+                  fontSize: 16.5,
+                  height: 1.6,
+                  fontWeight: FontWeight.w600)),
+      ]),
+      textAlign: TextAlign.center,
+    );
+  }
+}
+
+/// حبّة صغيرة ذهبية (عدد القصائد أو وصف القسم)
+class CardPill extends StatelessWidget {
+  final IconData icon;
+  final String text;
+  const CardPill({super.key, required this.icon, required this.text});
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+        decoration: BoxDecoration(
+          color: accentGold.withOpacity(.16),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: accentGold.withOpacity(.7)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 16, color: accentGold),
+            const SizedBox(width: 7),
+            Text(text,
+                style: TextStyle(
+                    color: ink, fontSize: 13, fontWeight: FontWeight.w700)),
+          ],
+        ),
+      );
+}
+
+/// صف بطاقة بتصميم المخطوطة (للإعدادات و«أكمل القراءة»)
+class ManuscriptRow extends StatelessWidget {
+  final IconData? icon;
+  final Widget? leading;
+  final String? eyebrow; // سطر صغير فوق العنوان
+  final String title;
+  final String? subtitle;
+  final (Color, Color)? colors;
+  final VoidCallback onTap;
+  const ManuscriptRow({
+    super.key,
+    this.icon,
+    this.leading,
+    this.eyebrow,
+    required this.title,
+    this.subtitle,
+    this.colors,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final dc = colors ?? (brown, brownDark);
+    return ManuscriptCard(
+      colors: dc,
+      radius: 20,
+      gap: 14,
+      padding: const EdgeInsetsDirectional.fromSTEB(14, 14, 8, 20),
+      onTap: onTap,
+      child: Row(
+        children: [
+          leading ??
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [dc.$1, dc.$2],
+                  ),
+                  border: Border.all(color: accentGold, width: 1.6),
+                  boxShadow: [
+                    BoxShadow(
+                        color: accentGold.withOpacity(.35), blurRadius: 8),
+                  ],
+                ),
+                child: Icon(icon, color: accentGold, size: 25),
+              ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (eyebrow != null)
+                  Text(eyebrow!,
+                      style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: currentPalette.dark ? accentGold : brown)),
+                Text(title,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                        fontSize: 16.5,
+                        height: 1.4,
+                        fontWeight: FontWeight.w800,
+                        color: ink)),
+                if (subtitle != null)
+                  Text(subtitle!,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(fontSize: 12.5, color: inkSoft)),
+              ],
+            ),
+          ),
+          Icon(Icons.chevron_left_rounded, color: accentGold, size: 28),
+        ],
       ),
     );
   }
@@ -1921,54 +1998,20 @@ class PoemTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final count = versesLabel(poem.verses.length);
     final dc = diwanColorsByName(diwan);
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Container(
-        decoration: BoxDecoration(
-          color: cream,
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: accentGold.withOpacity(.45)),
-          boxShadow: _softShadow(.10),
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(17),
-          child: Stack(
-            children: [
-              // شريط ذهبي على الجانب
-              PositionedDirectional(
-                start: 0,
-                top: 0,
-                bottom: 0,
-                child: Container(
-                  width: 5,
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        accentGold,
-                        Color.lerp(accentGold, brownDark, .35)!
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-              Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  onTap: () {
-                    markLastRead(diwan, poem);
-                    Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (_) => PoemPage(
-                                poem: poem,
-                                diwan: diwan,
-                                highlight: highlight)));
-                  },
-                  child: Padding(
-                    padding: const EdgeInsetsDirectional.fromSTEB(16, 12, 4, 12),
-                    child: Row(
+    return ManuscriptCard(
+      colors: dc,
+      radius: 18,
+      gap: 12,
+      padding: const EdgeInsetsDirectional.fromSTEB(14, 12, 6, 18),
+      onTap: () {
+        markLastRead(diwan, poem);
+        Navigator.push(
+            context,
+            MaterialPageRoute(
+                builder: (_) => PoemPage(
+                    poem: poem, diwan: diwan, highlight: highlight)));
+      },
+      child: Row(
                       children: [
                         if (number != null)
                           _NumberStar(
@@ -2039,13 +2082,6 @@ class PoemTile extends StatelessWidget {
                             color: accentGold, size: 26),
                       ],
                     ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
     );
   }
 }
@@ -3419,147 +3455,41 @@ class SettingsPage extends StatelessWidget {
 
             // ── ثيمات التطبيق (داخل زرار) ──
             _sub(Icons.palette_rounded, 'مظهر التطبيق'),
-            Material(
-              color: cream,
-              elevation: 1.5,
-              shadowColor: Colors.black38,
-              clipBehavior: Clip.antiAlias,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(18),
-                side: BorderSide(color: accentGold.withOpacity(.6)),
-              ),
-              child: InkWell(
-                onTap: () => _pickTheme(context),
-                child: Padding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                  child: ListenableBuilder(
-                    listenable: appThemeIndex,
-                    builder: (_, __) {
-                      final p = appPalettes[appThemeIndex.value];
-                      return Row(
-                        children: [
-                          Container(
-                            width: 44,
-                            height: 44,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: p.primary,
-                              border: Border.all(color: p.accent, width: 3),
-                            ),
-                          ),
-                          const SizedBox(width: 14),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text('اختيار الثيم',
-                                    style: TextStyle(
-                                        fontSize: 17,
-                                        fontWeight: FontWeight.bold,
-                                        color: ink)),
-                                const SizedBox(height: 2),
-                                Text(p.label,
-                                    style: TextStyle(
-                                        fontSize: 13, color: inkSoft)),
-                              ],
-                            ),
-                          ),
-                          Icon(Icons.chevron_left_rounded,
-                              color: accentGold, size: 28),
-                        ],
-                      );
-                    },
+            ListenableBuilder(
+              listenable: appThemeIndex,
+              builder: (_, __) {
+                final p = appPalettes[appThemeIndex.value];
+                return ManuscriptRow(
+                  leading: Container(
+                    width: 48,
+                    height: 48,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: p.primary,
+                      border: Border.all(color: p.accent, width: 3),
+                    ),
                   ),
-                ),
-              ),
+                  title: 'اختيار الثيم',
+                  subtitle: p.label,
+                  onTap: () => _pickTheme(context),
+                );
+              },
             ),
-
-            const SizedBox(height: 22),
+            const SizedBox(height: 10),
             _sub(Icons.text_fields_rounded, 'القراءة'),
-            Material(
-              color: brown,
-              borderRadius: BorderRadius.circular(18),
-              elevation: 2,
-              clipBehavior: Clip.antiAlias,
-              child: InkWell(
-                onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                        builder: (_) => const FontSettingsPage())),
-                child: Padding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 44,
-                        height: 44,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: accentGold.withOpacity(.2),
-                          border: Border.all(color: accentGold),
-                        ),
-                        child: Icon(Icons.text_fields_rounded,
-                            color: accentGold, size: 26),
-                      ),
-                      const SizedBox(width: 14),
-                      const Expanded(
-                        child: Text('إعدادات خط القصائد',
-                            style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 17,
-                                fontWeight: FontWeight.bold)),
-                      ),
-                      Icon(Icons.chevron_left_rounded,
-                          color: accentGold, size: 28),
-                    ],
-                  ),
-                ),
-              ),
+            ManuscriptRow(
+              icon: Icons.text_fields_rounded,
+              title: 'إعدادات خط القصائد',
+              onTap: () => Navigator.push(context,
+                  MaterialPageRoute(builder: (_) => const FontSettingsPage())),
             ),
-            const SizedBox(height: 12),
-            Material(
-              color: brown,
-              borderRadius: BorderRadius.circular(18),
-              elevation: 2,
-              clipBehavior: Clip.antiAlias,
-              child: InkWell(
-                onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                        builder: (_) =>
-                            const FontSettingsPage(salawat: true))),
-                child: Padding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 44,
-                        height: 44,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: accentGold.withOpacity(.2),
-                          border: Border.all(color: accentGold),
-                        ),
-                        child: Icon(Icons.auto_awesome_rounded,
-                            color: accentGold, size: 26),
-                      ),
-                      const SizedBox(width: 14),
-                      const Expanded(
-                        child: Text('إعدادات خط الصلوات',
-                            style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 17,
-                                fontWeight: FontWeight.bold)),
-                      ),
-                      Icon(Icons.chevron_left_rounded,
-                          color: accentGold, size: 28),
-                    ],
-                  ),
-                ),
-              ),
+            ManuscriptRow(
+              icon: Icons.auto_awesome_rounded,
+              title: 'إعدادات خط الصلوات',
+              onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (_) => const FontSettingsPage(salawat: true))),
             ),
             const SizedBox(height: 18),
             const Divider(),
@@ -3696,18 +3626,14 @@ class SectionHeading extends StatelessWidget {
         padding: const EdgeInsets.only(bottom: 14),
         child: Row(
           children: [
-            Container(
-              width: 5,
-              height: 26,
-              decoration: BoxDecoration(
-                color: accentGold,
-                borderRadius: BorderRadius.circular(3),
-              ),
-            ),
+            CustomPaint(
+                size: const Size(22, 22), painter: _StarPainter(accentGold)),
             const SizedBox(width: 10),
             Text(text,
                 style: TextStyle(
-                    fontSize: 21, fontWeight: FontWeight.bold, color: brown)),
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800,
+                    color: currentPalette.dark ? ink : brown)),
             const SizedBox(width: 12),
             Expanded(
               child: Container(

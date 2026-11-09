@@ -27,6 +27,17 @@ class SavedFile {
 
   String get ext => kind == SavedKind.pdf ? 'pdf' : 'png';
 
+  /// اسم فريد للحفظ في الموبايل وللمشاركة: العنوان + التاريخ والوقت
+  /// (فلا يتكرر اسم ملفين أبدًا ويتحفظ كل ملف مستقلًا)
+  String get uniqueBase {
+    String two(int n) => n.toString().padLeft(2, '0');
+    final stamp = '${date.year}${two(date.month)}${two(date.day)}_'
+        '${two(date.hour)}${two(date.minute)}${two(date.second)}';
+    final name =
+        SavedFiles._clean(title, kind == SavedKind.pdf ? 'قصيدة' : 'بيت');
+    return '${name}_$stamp';
+  }
+
   String get dateLabel {
     String two(int n) => n.toString().padLeft(2, '0');
     return '${arDigits(date.day)} ${gregorianMonths[date.month - 1]} '
@@ -130,7 +141,7 @@ class SavedFiles {
       final tmp = await getTemporaryDirectory();
       final dir = Directory('${tmp.path}${Platform.pathSeparator}share');
       if (!await dir.exists()) await dir.create(recursive: true);
-      final clean = _clean(f.title, f.kind == SavedKind.pdf ? 'قصيدة' : 'بيت');
+      final clean = f.uniqueBase;
       final copy = await f.file
           .copy('${dir.path}${Platform.pathSeparator}$clean.${f.ext}');
       await Share.shareXFiles(
@@ -153,7 +164,7 @@ class SavedFiles {
       final bytes = await f.file.readAsBytes();
       final path = await FilePicker.platform.saveFile(
         dialogTitle: 'حفظ نسخة في الموبايل',
-        fileName: '${f.title}.${f.ext}',
+        fileName: '${f.uniqueBase}.${f.ext}',
         bytes: bytes,
         type: FileType.custom,
         allowedExtensions: [f.ext],
@@ -162,6 +173,116 @@ class SavedFiles {
     } catch (_) {
       _toast(m, 'تعذّر حفظ النسخة');
     }
+  }
+
+  /// اسم فريد داخل مجموعة (لو تكرر الاسم في نفس الثانية يُضاف رقم)
+  static String _uniqueName(SavedFile f, Set<String> used) {
+    final base = f.uniqueBase;
+    var name = '$base.${f.ext}';
+    var n = 2;
+    while (!used.add(name)) {
+      name = '${base}_$n.${f.ext}';
+      n++;
+    }
+    return name;
+  }
+
+  /// مشاركة عدة ملفات دفعة واحدة، كل ملف باسم مختلف
+  static Future<void> shareMany(
+      BuildContext context, List<SavedFile> files) async {
+    if (files.isEmpty) return;
+    final m = ScaffoldMessenger.of(context);
+    try {
+      final tmp = await getTemporaryDirectory();
+      final dir = Directory('${tmp.path}${Platform.pathSeparator}share_multi');
+      if (await dir.exists()) await dir.delete(recursive: true);
+      await dir.create(recursive: true);
+      final used = <String>{};
+      final xs = <XFile>[];
+      for (final f in files) {
+        final name = _uniqueName(f, used);
+        final c = await f.file.copy('${dir.path}${Platform.pathSeparator}$name');
+        xs.add(XFile(c.path,
+            name: name,
+            mimeType: f.kind == SavedKind.pdf ? 'application/pdf' : 'image/png'));
+      }
+      await Share.shareXFiles(xs);
+    } catch (_) {
+      _toast(m, 'تعذّرت المشاركة');
+    }
+  }
+
+  /// حفظ عدة ملفات في الموبايل: تختارين مجلدًا مرة واحدة وتُحفظ كلها فيه
+  /// (كل ملف باسم مختلف). لو رفض النظام المجلد نحفظ الباقي واحدًا واحدًا.
+  static Future<void> saveMany(
+      BuildContext context, List<SavedFile> files) async {
+    if (files.isEmpty) return;
+    if (files.length == 1) return exportCopy(context, files.first);
+    final m = ScaffoldMessenger.of(context);
+    String? dirPath;
+    try {
+      dirPath = await FilePicker.platform
+          .getDirectoryPath(dialogTitle: 'اختاري مكان حفظ الملفات');
+    } catch (_) {}
+    if (dirPath == null) return;
+
+    final used = <String>{};
+    var saved = 0;
+    try {
+      for (final f in files) {
+        final name = _uniqueName(f, used);
+        await f.file.copy('$dirPath${Platform.pathSeparator}$name');
+        saved++;
+      }
+      _toast(m, 'تم حفظ ${arDigits(saved)} ملف في الموبايل');
+    } catch (_) {
+      try {
+        for (final f in files.sublist(saved)) {
+          final name = _uniqueName(f, used);
+          final p = await FilePicker.platform.saveFile(
+            dialogTitle: 'حفظ نسخة في الموبايل',
+            fileName: name,
+            bytes: await f.file.readAsBytes(),
+            type: FileType.custom,
+            allowedExtensions: [f.ext],
+          );
+          if (p == null) break;
+          saved++;
+        }
+        _toast(m, 'تم حفظ ${arDigits(saved)} ملف في الموبايل');
+      } catch (_) {
+        _toast(m, 'تعذّر حفظ الملفات');
+      }
+    }
+  }
+
+  /// حذف عدة ملفات بعد التأكيد
+  static Future<bool> confirmAndDeleteMany(
+      BuildContext context, List<SavedFile> files) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('حذف الملفات'),
+        content:
+            Text('هل تريدين حذف ${arDigits(files.length)} ملف من التطبيق؟'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('إلغاء')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('حذف')),
+        ],
+      ),
+    );
+    if (ok != true) return false;
+    for (final f in files) {
+      try {
+        if (await f.file.exists()) await f.file.delete();
+      } catch (_) {}
+    }
+    changes.value++;
+    return true;
   }
 
   /// يسأل ثم يحذف. يرجع true لو تم الحذف.
@@ -244,9 +365,134 @@ class _SavedTab extends StatefulWidget {
 class _SavedTabState extends State<_SavedTab> {
   late Future<List<SavedFile>> _future = SavedFiles.list(widget.kind);
 
+  // وضع التحديد (للمشاركة أو الحفظ في الموبايل أو الحذف)
+  bool _selecting = false;
+  final Set<String> _sel = {};
+
+  bool _isSel(SavedFile f) => _sel.contains(f.file.path);
+
+  void _toggle(SavedFile f) => setState(() {
+        if (!_sel.remove(f.file.path)) _sel.add(f.file.path);
+      });
+
+  void _begin(SavedFile f) => setState(() {
+        _selecting = true;
+        _sel.add(f.file.path);
+      });
+
+  void _exitSelect() => setState(() {
+        _selecting = false;
+        _sel.clear();
+      });
+
   void _reload() {
     if (!mounted) return;
-    setState(() => _future = SavedFiles.list(widget.kind));
+    setState(() {
+      _sel.removeWhere((p) => !File(p).existsSync());
+      _future = SavedFiles.list(widget.kind);
+    });
+  }
+
+  Widget _toolbar(List<SavedFile> items, List<SavedFile> chosen) {
+    final all = chosen.length == items.length;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+      child: Row(
+        children: [
+          if (!_selecting) ...[
+            Text(
+                '${arDigits(items.length)} ${widget.kind == SavedKind.pdf ? 'ملف' : 'صورة'}',
+                style: TextStyle(color: inkSoft, fontWeight: FontWeight.w600)),
+            const Spacer(),
+            OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(
+                  foregroundColor: brown,
+                  side: BorderSide(color: accentGold.withOpacity(.7))),
+              onPressed: () => setState(() => _selecting = true),
+              icon: const Icon(Icons.checklist_rounded, size: 20),
+              label: const Text('تحديد'),
+            ),
+          ] else ...[
+            Expanded(
+              child: Text(
+                chosen.isEmpty
+                    ? 'اضغطي على الملفات لتحديدها'
+                    : 'تم تحديد ${arDigits(chosen.length)} من ${arDigits(items.length)}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(color: brownDark, fontWeight: FontWeight.w600),
+              ),
+            ),
+            TextButton(
+              onPressed: () => setState(() {
+                if (all) {
+                  _sel.clear();
+                } else {
+                  _sel
+                    ..clear()
+                    ..addAll(items.map((f) => f.file.path));
+                }
+              }),
+              child: Text(all ? 'إلغاء الكل' : 'تحديد الكل',
+                  style: TextStyle(color: brown)),
+            ),
+            TextButton(
+                onPressed: _exitSelect,
+                child: Text('إلغاء', style: TextStyle(color: brown))),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _actionBar(List<SavedFile> chosen) {
+    final none = chosen.isEmpty;
+    final style = FilledButton.styleFrom(
+        backgroundColor: brown, foregroundColor: Colors.white);
+    return Material(
+      color: cream,
+      elevation: 8,
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+          child: Row(
+            children: [
+              Expanded(
+                child: FilledButton.icon(
+                  style: style,
+                  onPressed:
+                      none ? null : () => SavedFiles.shareMany(context, chosen),
+                  icon: const Icon(Icons.share_rounded, size: 20),
+                  label: const Text('مشاركة'),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: FilledButton.icon(
+                  style: style,
+                  onPressed:
+                      none ? null : () => SavedFiles.saveMany(context, chosen),
+                  icon: const Icon(Icons.download_rounded, size: 20),
+                  label: const Text('حفظ في الموبايل'),
+                ),
+              ),
+              IconButton(
+                tooltip: 'حذف المحدد',
+                icon: Icon(Icons.delete_outline_rounded, color: brown),
+                onPressed: none
+                    ? null
+                    : () async {
+                        final ok =
+                            await SavedFiles.confirmAndDeleteMany(context, chosen);
+                        if (ok && mounted) _exitSelect();
+                      },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   @override
@@ -270,23 +516,30 @@ class _SavedTabState extends State<_SavedTab> {
           }
           final items = snap.data ?? const <SavedFile>[];
           if (items.isEmpty) return _EmptySaved(widget.kind);
-          if (widget.kind == SavedKind.pdf) {
-            return ListView.builder(
-              padding: const EdgeInsets.fromLTRB(16, 14, 16, 24),
-              itemCount: items.length,
-              itemBuilder: (_, i) => _pdfTile(context, items[i]),
-            );
-          }
-          return GridView.builder(
-            padding: const EdgeInsets.fromLTRB(16, 14, 16, 24),
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
-              crossAxisSpacing: 12,
-              mainAxisSpacing: 12,
-              childAspectRatio: 420 / 594,
-            ),
-            itemCount: items.length,
-            itemBuilder: (_, i) => _imageTile(context, items[i]),
+          final chosen = [for (final f in items) if (_isSel(f)) f];
+          final Widget body = widget.kind == SavedKind.pdf
+              ? ListView.builder(
+                  padding: const EdgeInsets.fromLTRB(16, 10, 16, 24),
+                  itemCount: items.length,
+                  itemBuilder: (_, i) => _pdfTile(context, items[i]),
+                )
+              : GridView.builder(
+                  padding: const EdgeInsets.fromLTRB(16, 10, 16, 24),
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 2,
+                    crossAxisSpacing: 12,
+                    mainAxisSpacing: 12,
+                    childAspectRatio: 420 / 594,
+                  ),
+                  itemCount: items.length,
+                  itemBuilder: (_, i) => _imageTile(context, items[i]),
+                );
+          return Column(
+            children: [
+              _toolbar(items, chosen),
+              Expanded(child: body),
+              if (_selecting) _actionBar(chosen),
+            ],
           );
         },
       );
@@ -296,11 +549,19 @@ class _SavedTabState extends State<_SavedTab> {
         decoration: BoxDecoration(
           color: cream,
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: accentGold.withOpacity(.5)),
+          border: Border.all(
+              color: _isSel(f) ? brown : accentGold.withOpacity(.5),
+              width: _isSel(f) ? 2 : 1),
         ),
         child: ListTile(
-          onTap: () => SavedFiles.open(context, f),
-          leading: Container(
+          onTap: () => _selecting ? _toggle(f) : SavedFiles.open(context, f),
+          onLongPress: () => _selecting ? _toggle(f) : _begin(f),
+          leading: _selecting
+              ? Checkbox(
+                  value: _isSel(f),
+                  activeColor: brown,
+                  onChanged: (_) => _toggle(f))
+              : Container(
             width: 44,
             height: 44,
             decoration: BoxDecoration(
@@ -314,7 +575,9 @@ class _SavedTabState extends State<_SavedTab> {
               style: TextStyle(fontWeight: FontWeight.bold, color: ink)),
           subtitle: Text('${f.dateLabel}  •  ${f.sizeLabel}',
               style: TextStyle(color: inkSoft, fontSize: 12.5)),
-          trailing: Row(
+          trailing: _selecting
+              ? null
+              : Row(
             mainAxisSize: MainAxisSize.min,
             children: [
               IconButton(
@@ -372,12 +635,17 @@ class _SavedTabState extends State<_SavedTab> {
       );
 
   Widget _imageTile(BuildContext context, SavedFile f) => GestureDetector(
-        onTap: () => Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => _ImageViewer(f))),
+        onTap: () => _selecting
+            ? _toggle(f)
+            : Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => _ImageViewer(f))),
+        onLongPress: () => _selecting ? _toggle(f) : _begin(f),
         child: Container(
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: accentGold.withOpacity(.6)),
+            border: Border.all(
+                color: _isSel(f) ? brown : accentGold.withOpacity(.6),
+                width: _isSel(f) ? 2.5 : 1),
             color: cream,
           ),
           clipBehavior: Clip.antiAlias,
@@ -391,6 +659,24 @@ class _SavedTabState extends State<_SavedTab> {
                 errorBuilder: (_, __, ___) => Center(
                     child: Icon(Icons.broken_image_rounded, color: inkSoft)),
               ),
+              if (_selecting)
+                Positioned.fill(
+                    child: Container(
+                        color: _isSel(f)
+                            ? accentGold.withOpacity(.28)
+                            : Colors.black12)),
+              if (_selecting)
+                Positioned(
+                  top: 8,
+                  right: 8,
+                  child: Icon(
+                      _isSel(f)
+                          ? Icons.check_circle_rounded
+                          : Icons.radio_button_unchecked_rounded,
+                      color: _isSel(f) ? accentGold : Colors.white,
+                      size: 28),
+                ),
+              if (!_selecting)
               Positioned(
                 top: 6,
                 right: 6,
